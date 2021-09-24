@@ -22,8 +22,8 @@ foo:
 main:
   - title: "Readings"
     url: /readings/
-  - title: "Leetcode"
-    url: /leedcode/
+  - title: "Leetcodes"
+    url: /leetcodes/
 
 
 # sidebar navigation list sample
