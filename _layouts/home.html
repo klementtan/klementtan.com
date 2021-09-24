@@ -1,0 +1,37 @@
+---
+layout: archive
+---
+
+{{ content }}
+
+<h3 class="archive__subtitle">{{ site.data.ui-text[site.locale].recent_posts | default: "Recent Readings" }}</h3>
+
+{% if paginator %}
+  {% assign reading = paginator.readings %}
+{% else %}
+  {% assign readings = site.readings %}
+{% endif %}
+
+{% assign entries_layout = page.entries_layout | default: 'list' %}
+<div class="entries-{{ entries_layout }}">
+  {% for reading in readings %}
+    {% include archive-single.html type=entries_layout %}
+  {% endfor %}
+</div>
+
+<h3 class="archive__subtitle">{{ site.data.ui-text[site.locale].recent_posts | default: "Recent Leetcode Review" }}</h3>
+
+{% if paginator %}
+  {% assign leetcode = paginator.leetcodes %}
+{% else %}
+  {% assign leetcodees = site.leetcodes %}
+{% endif %}
+
+{% assign entries_layout = page.entries_layout | default: 'list' %}
+<div class="entries-{{ entries_layout }}">
+  {% for leetcode in leetcodes %}
+    {% include archive-single.html type=entries_layout %}
+  {% endfor %}
+</div>
+{% include paginator.html %}
+
