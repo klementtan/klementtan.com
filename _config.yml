@@ -71,26 +71,21 @@ naver_site_verification  :
 
 # Social Sharing
 twitter:
-  username               : &twitter "mmistakes"
-facebook:
-  username               : &facebook "michaelrose"
-  app_id                 :
-  publisher              :
-og_image                 : "/assets/images/site-logo.png" # Open Graph/Twitter default site image
+  username               : &twitter "KlementTan"
+og_image                 :  # Open Graph/Twitter default site image
 # For specifying social profiles, used in _includes/seo.html
 # - https://developers.google.com/structured-data/customize/social-profiles
 social:
   type                   : # Person or Organization (defaults to Person)
   name                   : # If the user or organization name differs from the site's name
   links: # An array of links to social media profiles
-    - "https://twitter.com/mmistakes"
-    - "https://www.facebook.com/michaelrose"
+    - "https://twitter.com/KlementTan"
 
 # Analytics
 analytics:
   provider               : "google-universal" # false (default), "google", "google-universal", "google-gtag", "custom"
   google:
-    tracking_id          : "UA-2011187-3" # Replace this with your ID, or delete
+    tracking_id          : "G-W5YPH30E6X" # Replace this with your ID, or delete
     anonymize_ip         : true
 
 
@@ -101,6 +96,9 @@ author:
   bio              : "Computer Science and Applied Mathematics undergraduate at NUS."
   location         : "Singapore"
   links:
+    - label: "Email"
+      icon: "fas fa-fw fa-envelope-square"
+      url: "mailto:klementtan@gmail.com"
     - label: "GitHub"
       icon: "fab fa-fw fa-github"
       url: "https://github.com/klementtan"
@@ -109,6 +107,9 @@ author:
 # Site Footer
 footer:
   links:
+    - label: "Email"
+      icon: "fas fa-fw fa-envelope-square"
+      url: "mailto:klementtan@gmail.com"
     - label: "GitHub"
       icon: "fab fa-fw fa-github"
       url: "https://github.com/klementtan"

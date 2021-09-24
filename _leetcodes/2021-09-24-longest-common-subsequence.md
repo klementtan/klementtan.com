@@ -1,5 +1,6 @@
 ---
 title: "LC: Longest Common Subsequence"
+excerpt: Finding longest common subsequence between two strings.
 categories:
   - Leet Code
 tags:

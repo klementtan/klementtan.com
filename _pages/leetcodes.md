@@ -1,5 +1,5 @@
 ---
-title: Pets
+title: Leet Code 
 layout: collection
 permalink: /leetcodes/
 collection: leetcodes 
