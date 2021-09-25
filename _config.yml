@@ -205,7 +205,6 @@ defaults:
       read_time: true
       comments: true
       share: true
-      related: true
   # _leetcodes
   - scope:
       path: ""
@@ -215,7 +214,6 @@ defaults:
       read_time: true
       comments: true
       share: true
-      related: true
 
 
 

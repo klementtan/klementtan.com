@@ -70,7 +70,6 @@ public:
                 r = m -1;
             }
         }
-        cout << l <<endl;
         return nums[l] == target ? l : -1;
     }
     vector<int> searchRange(vector<int>& nums, int target) {
