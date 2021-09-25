@@ -57,7 +57,7 @@ Alternative:
 
 #### Declaring constants for class
 
-When declaring constant that should only exist within a class scope, use 
+When declaring constant that should only exist within a class scope, use
 `static const`.
 
 ```cpp
@@ -82,6 +82,7 @@ Use inline functions instead of `#define` macros.
 * `const char * p`: When `const` is on the **left** of a pointer, it means that the data is `const`.
 You cannot change the value that the pointer is pointing to. However, you are allowed to change
 pointer.
+
   ```cpp
   int i = 1;
   int j = 2;
@@ -89,9 +90,11 @@ pointer.
   *ptr = 3; // compilation error
   ptr = &i; // ok
   ```
+
 * `char * const p`: When `const` is on the **right** of a pointer, it means that
 the pointer is `const` and you cannot change the variable to a new pointer. However,
 you are allowed to change the value the pointer points to.
+
   ```cpp
   int i = 1;
   int j = 2;
@@ -105,7 +108,7 @@ you are allowed to change the value the pointer points to.
 * Mimicks the behaviour of a pointer
 * `const std:xxx<T>iterator iter` same as `T* const`: Can change the value the iterator
 points to but cannot change the iterator to a new iterator.
-* `std:xxx<T>const_iterator iter` same as `const T*`: Cannot change the value 
+* `std:xxx<T>const_iterator iter` same as `const T*`: Cannot change the value
 the iterator points to but can change the iterator to a new iterator.
 
 #### Function return `const`
@@ -225,13 +228,14 @@ by copy assignment constructor.
 
 #### Non-local static objects in different translation unit
 
-* **static object** are objects that exists when it constructed to the end of program. 
-Does not exist on the stack or heap. They are destoryed when 
+* **static object** are objects that exists when it constructed to the end of program.
+Does not exist on the stack or heap. They are destoryed when
 * **non-local static object** are static objects outside of a function.
 * **translation unit**: source code that give rise to single object file.
 
 **Problem** of depending on a **non-local static object in different translation
 unit**:
+
 ```cpp
 // some.cpp
 class FileSystem {
@@ -253,11 +257,12 @@ public:
 Directory tmpDir(params);
 ```
 
-* Relative order initialization of non-local static object in different 
+* Relative order initialization of non-local static object in different
 translation unit is **undefined**. `tmpDir` could be initialized before
 `tfs`.
 
 **Solution** (reference-returning functions):
+
 ```cpp
 // some.cpp
 class FileSystem {
@@ -289,3 +294,4 @@ Directory tmpDir(params);
   * Does not work well with multi-threading. Need to call the reference-returning
   functions in master thread before forking child thread so that all child thread
   will have the same reference.
+
