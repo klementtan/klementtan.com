@@ -1,6 +1,7 @@
 ---
-title: "LC: Counting Bits"
+title: "338: Counting Bits"
 excerpt: Count the number of bits for 0 to n
+problem_id: 338
 categories:
   - Leet Code
 tags:
@@ -9,9 +10,15 @@ tags:
 
 ## Problem
 
-[Counting Bits](https://leetcode.com/problems/counting-bits/) Given an integer
-`n`, return an array ans of length `n + 1` such that for each `i (0 <= i <= n)`,
-`ans[i]` is the number of 1's in the binary representation of `i`.
+**Problem ID**: [338](https://leetcode.com/problems/counting-bits/)
+
+**Title**: Counting Bits
+
+**Difficulty**: Easy
+
+**Description**:
+Given an integer `n`, return an array ans of length `n + 1` such that for each 
+`i (0 <= i <= n)`, `ans[i]` is the number of 1's in the binary representation of `i`.
 
 ## Thoughts
 

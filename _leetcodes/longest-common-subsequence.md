@@ -1,6 +1,7 @@
 ---
-title: "LC: Longest Common Subsequence"
+title: "1143: Longest Common Subsequence"
 excerpt: Finding longest common subsequence between two strings.
+problem_id: 1143
 categories:
   - Leet Code
 tags:
@@ -10,9 +11,12 @@ tags:
 
 ## Problem
 
-Given two strings, find the length of the longest common subsequence.
+**Problem ID**: [1143](https://leetcode.com/problems/longest-common-subsequence/)
 
-[Problem Link](https://leetcode.com/problems/longest-common-subsequence/)
+**Title**: Longest Common Subsequence
+
+**Description**:
+Given two strings, find the length of the longest common subsequence.
 
 ## Thoughts
 

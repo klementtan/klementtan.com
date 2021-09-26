@@ -1,13 +1,22 @@
 ---
-title: "LC: Find First and Last Position of Element in Sorted Array"
+title: "34: Find First and Last Position of Element in Sorted Array"
 excerpt: Find the first and last position.
+problem_id: 34
 categories:
   - Leet Code
 tags:
   - Binary Search 
 ---
 
-[Problem](https://leetcode.com/problems/find-first-and-last-position-of-element-in-sorted-array/): 
+## Problem
+
+**Problem ID**: [34](https://leetcode.com/problems/find-first-and-last-position-of-element-in-sorted-array/)
+
+**Title**: Find First and Last Position of Element in Sorted Array
+
+**Difficulty**: Medium
+
+**Description**:
 Given an array of integers nums sorted in ascending order, find the starting and 
 ending position of a given target value.
 

@@ -4,8 +4,18 @@ layout: archive
 
 {{ content }}
 
-<h3 class="archive__subtitle">{{ site.data.ui-text[site.locale].recent_posts | default: "Recent Posts" }}</h3>
+<h3 class="archive__subtitle">Recent Leetcodes</h3>
 
+{% for post in site.leetcodes limit: 5 %}
+  {% include archive-single.html %}
+{% endfor %}
+
+<h3 class="archive__subtitle">Recent Readings</h3>
+{% for post in site.readings limit: 5 %}
+  {% include archive-single.html %}
+{% endfor %}
+
+<h3 class="archive__subtitle">Recent Posts</h3>
 {% if paginator %}
   {% assign posts = paginator.posts %}
 {% else %}
