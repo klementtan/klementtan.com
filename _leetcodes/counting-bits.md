@@ -1,4 +1,3 @@
-
 ---
 title: "LC: Counting Bits"
 excerpt: Count the number of bits for 0 to n
