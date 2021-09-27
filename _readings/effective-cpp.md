@@ -295,3 +295,88 @@ Directory tmpDir(params);
   functions in master thread before forking child thread so that all child thread
   will have the same reference.
 
+## Chapter 2
+
+### Item 5: Know what functions C++ silently writes and calls
+
+```cpp
+class Empty {
+  Empty(){} // default constructor
+  Empty(const Empty& rhs){} // copy constructor
+  Empty& operator=(const Empty& rhs){} // copy assignment constructor
+  ~Empty() {} // destructor
+}
+```
+
+By default, the compile will generate the following constructors inline:
+
+1. **Generated default constructor and destructor**:
+  * Default constructor:
+    ```cpp
+    Emtpy
+    Empty e1; // defa
+    ```
+  * Create a default constructor that calls the base class' constructor/destructor
+  * Call the default constructor/destructor of data members
+  * **Exception**: When any constructor (default/non-default) is declared, the compiler
+    will not create a default constructor but will still create copy constructor and copy
+    assignment constructor.
+2. **Generated copy constructor**:
+  * Copy constructor:
+  ```cpp
+  NamedObject<int> no1("Smallest Prime Number", 2);
+  NamedObject<int> no2(no1); // copy constructor invoked
+  ```
+  * The generated copy constructor will call the copy constructor on each data member and base class.
+3. **Generated copy assignment**:
+  * Copy assignment constructor:
+  ```cpp
+  Empty e1;
+  Empty e2;
+  e2 = e1; // copy assignment constructor
+  ```
+  * Call the copy assignment constructor for each data member and base class.
+  * Caveats: If the data member is a reference to an object it will not work as c++ does not
+  allow changing reference of a reference variable. You will need to define your own copy assignment
+  constructor if you have a reference variable.
+  ```cpp
+  int a = 2;
+  int b = 4;
+  int& ref = a;
+  // cannot change ref to point to b instead
+  ```
+
+### Item 6: Explicitly disallow the use of compiler-generated functions you do not want. 
+
+In some cases you would want to disable the compiler from generating copy assignment constructor
+and copy constructor (ie: Wanting an object to be unique).
+
+**Method 1**: Declare copy assignment constructor and copy constructor as private and **do not define**
+them.
+
+```cpp
+class HomeForSale {
+private:
+  HomeForSale(const HomeForSale&);
+  HomeForSale& HomeForSale=(const HomeForSale&);
+}
+```
+
+* **Making private**: Prevent calling of constructor outside of class
+* **Not defining constructor**: Throw link time error when member functions try to call constructor.
+* This method is widely use
+
+**Method 2**: Set assignment constructor and copy constructor private in base class.
+
+```cpp
+class Uncopyable {
+private: 
+  Uncopyable(const Uncopyable&);
+  Uncopyabl& operator=(const Uncopyable&);
+}
+class HomeForSale : private Uncopyable {}
+```
+This result in compilation error when trying to use copy assignment/ copy constructor.
+It will call the base counter part which are private.
+
+
