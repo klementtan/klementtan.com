@@ -4,14 +4,15 @@ layout: archive
 
 {{ content }}
 
-<h3 class="archive__subtitle">Recent Leetcodes</h3>
-
-{% for post in site.leetcodes limit: 5 %}
-  {% include archive-single.html %}
-{% endfor %}
 
 <h3 class="archive__subtitle">Recent Readings</h3>
 {% for post in site.readings limit: 5 %}
+  {% include archive-single.html %}
+{% endfor %}
+
+<h3 class="archive__subtitle">Recent Leetcodes</h3>
+
+{% for post in site.leetcodes limit: 5 %}
   {% include archive-single.html %}
 {% endfor %}
 
