@@ -379,4 +379,63 @@ class HomeForSale : private Uncopyable {}
 This result in compilation error when trying to use copy assignment/ copy constructor.
 It will call the base counter part which are private.
 
+### Item 7: Declare destructor virtual in polymorphic base classes.
 
+Example:
+```cpp
+class TimeKeeper {
+public: 
+  TimeKeeper();
+  ~TimeKeeper();
+}
+
+class AtomicClock : public TimeKeeper {...}
+```
+
+Problems with non-virtual destructor:
+
+* When a pointer to a derived class is cast to a base class, only the base class destructor would be called instead
+of the derived class.
+* This results in the data members of the base class being destructed but the data members of derived
+class being untouched.
+* Result in partially destructed objects and memory leaks
+
+**Solution:** Use virtual destructor for all base classes.
+
+Virtual function under the hood:
+
+* Object requires to store information at runtime to determine which virtual method to be called. ie:
+  ```cpp
+  class B{
+    virtual foo();
+  }
+  class D1 : B {
+    virtual foo();
+  }
+  class D2 : B {
+    virtual foo();
+  }
+  int i;
+  cin >> i;
+  
+  B* b =  i > 5 ? new D1() : new D2();
+  // We will only know at run time which virtual method to call.
+  b->foo()
+  ```
+* Each object has a **virtual table pointer**(`vptr`) that points to an array of pointer **virtual table** (`vtbl`)
+* Each `vtbl` will point to a function that should be invoked.
+* **Drawbacks** Storing virtual table and pointer will increase space
+  
+Creating an **abstract class**:
+
+* Use pure virtual destructor
+* Need to add definition to the destructor of the abstract class as the base class destructor(abstract class) would be called
+after the derived class destructor.
+  
+```cpp
+clas AWOV {
+public:
+  virtual ~AWOV() = 0;
+}
+AWOV::~AWOV() {} // define virtual destructor
+```
