@@ -31,9 +31,7 @@ The encoded string should be as compact as possible.
 ## Thoughts
 
 I have previously completed [Serialize and Deserialize Binary Tree](https://leetcode.com/problems/serialize-and-deserialize-binary-tree/)
-problem and could easily reuse that solution to the problem. However, the  
-generalized solution for all Binary Tree requires the usage of null nodes
-to state the represent the end of leaves.
+problem and could easily reuse that solution to the problem. However, the generalized solution for all Binary Tree requires the usage of null nodes to state the represent the end of leaves.
 
 I tried very hard to find a more optimal solution that is specific to BST
 but had to eventually rely on the provided solution to do so.
