@@ -578,10 +578,11 @@ Widget& Widget::operator=(const Widget& rhs) {
 
 ### Item 12: Copy all parts of an object
 
-* Only copy-constructor and copy assignment operator should copy an object
-1. All local data members should be initialized in the copy constructors
-2. Invoke the copying function of **base class** too. Failing to do will result in the base class
+1. Only copy-constructor and copy assignment operator should copy an object
+2. All local data members should be initialized in the copy constructors
+3. Invoke the copying function of **base class** too. Failing to do will result in the base class
 member data to not be initialized
+
   ```cpp
   D(const D& rhs) 
   : B(rhs),
