@@ -439,3 +439,165 @@ public:
 }
 AWOV::~AWOV() {} // define virtual destructor
 ```
+
+### Item 8: Prevent exceptions from leaving destructor
+
+Throwing exceptions in destructor could result in multiple active exceptions (destructing vector of objs)
+which would lead to undefined behaviour.
+
+Instead, abstract out the logic to a separate public function to allow clients to call and handle it.
+If the client did not call it, execute the function in the destructor but catch all exceptions to
+prevent UB.
+
+### Item 9: Never call virtual functions during construction or destruction
+
+Understanding base class construction. When a derived class is constructed.
+
+1. It will first call the base class constructor
+2. **Only base class data members** will be initialized. Derived class data members will not be initialized yet.
+3. Virtual functions in base class **will not point to derived class' function during base class constructor**
+  - Why: derived class data members will not initialized. Calling the derived class function before
+  data member initialization will lead to UB.
+
+Calling pure virtual function in base class constructor/destructor
+
+1. Results in link error: base class calls the pure virtual function that is not defined
+2. Could bypass link error by calling the function through another function
+
+```cpp
+class Transaction {
+public:
+  Transaction()
+  {init)(;)}
+  virtual void logTransaction() const = 0;
+private:
+  void init()
+  {
+    ...
+    logTransaction() // call to virtual function
+  }
+}
+```
+
+Solution: Pass polymorphic data through method args instead of virtual function
+```cpp
+class Transaction {
+public:
+  explicit Transaction(const std::string& logInfo);
+  void logTransaction(const std::string& logInfo) const;
+}
+
+class BuyTransaction : public Transaction {
+public:
+  BuyTransaction(parameters) 
+  : Transaction(createLogString(parameters)) // should not access data members before derived class constructor
+  {
+
+  }
+}
+```
+
+### Item 10: Have assignment operator return a reference to `*this`
+
+By convention, we should return a reference to the current object for all assignment operators
+
+```cpp
+Widget& operator(const Widget& rhs){
+  ...
+  return *this
+}
+```
+
+This will allow you to chain assignment operators
+
+```cpp
+int x,y,z;
+x = y = z = 15;
+```
+
+* Assignment operations are right associative: `x=(y=(z=15))`
+
+### Item 11: Handle assignment to self in `operator=`
+
+Non-direct ways for potential self-assignment:
+* Different pointer to same reference
+  ```cpp
+  a[i] = a[j]
+
+  *px = *py
+  ```
+* Base class reference/pointer could point to a derived class
+  ```cpp
+  Base& rb;
+  Drirved* pd;
+
+  rb = *pd; // could be the same
+  ```
+
+Without handling self: Deleting self will result to the `rhs` to be deleted as well
+```cpp
+Widget& 
+Widget::operator=(const Widget& rhs)
+{
+  delete pb;
+  pb = new Bitmap(*rhs.pb) // rhs.pb already deleted
+  return *this
+}
+```
+
+Should place delete self as last statement
+```cpp
+Widget& Widget::operator=(const Widget& rhs)
+{
+  if(this == &rhs) return *this;
+  delete pb;
+  pb = new Bitmap(*rhs.pb) // if exception thrown here, pb will point to a deleted addr
+  return *this;
+}
+```
+Instead should:
+```cpp
+Widget& Widget::operator=(const Widget& rhs)
+{
+  Bitmap* pOrig = pb;
+  pb = new Bitmap(*rhs.pb);
+  delete pOrig; // only delete after pb points to a valid address
+  return *this;
+}
+```
+
+#### Copy-and-swap solution
+Make a copy of the `rhs`  then swap it to the  current file
+```cpp
+Widget& Widget::operator=(const Widget& rhs) {
+  Widget temp(rhs); // make a copy
+  swap(temp); // swap to *this
+  return *this;
+}
+```
+
+### Item 12: Copy all parts of an object
+
+* Only copy-constructor and copy assignment operator should copy an object
+1. All local data members should be initialized in the copy constructors
+2. Invoke the copying function of **base class** too. Failing to do will result in the base class
+member data to not be initialized
+  ```cpp
+  D(const D& rhs) 
+  : B(rhs),
+  m_data(rhs.m_data)
+  {
+    
+  }
+  D::operator=(const D& rhs)
+  {
+    B::operator=(rhs);
+    m_data = rhs.m_data
+    return *this
+  }
+  ```
+
+**Bad practices**: 
+* Do not call the copy assignment from copy constructor
+* Do not call the copy constructor from copy assignment
+* Use a third `init()` method instead
