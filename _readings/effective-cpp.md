@@ -602,3 +602,273 @@ member data to not be initialized
 * Do not call the copy assignment from copy constructor
 * Do not call the copy constructor from copy assignment
 * Use a third `init()` method instead
+
+## Chapter 3: Resource Management
+
+The contents of this chapter is slightly outdated as it still
+refers to `auto_ptr` (deprecated) and not the new `unique_ptr`.
+
+### Item 13: Use objects to manage resource
+
+The main takeaway for this item is to use object to manage
+heap based resource instead of raw pointers (just `T*`)
+
+#### Drawbacks of raw pointers
+
+1. Whenever you dynamically allocate memory, you will need to
+manually deallocate it.
+2. Your instruction to deallocate memory might not happen when
+there is an **early return**, **exception**, **break** in a loop.
+3. This will result in a memory leak
+
+#### Resource Acquisition Is Initialization (RAII)
+
+Using an object that acquires a resource (dynamically allocated resource)
+instead of managing raw pointers.
+
+Key Ideas:
+* All object's (on stack) destructor will be called once it goes out of scope
+* Tying a resource to an object will allow the destructor of the object to clean
+up the resource
+* std provides smart pointers that acts as a wrapper to objects
+  * `auto_ptr` (deprecated) and `shared_ptr`
+
+#### Smart Pointers
+
+* All resource are assigned to a managing object
+* Destructor of objects are called automatically when it is destroyed
+* Drawbacks: 
+  * Only calls `delete` on the pointer instead of `delete[]`. If the resource is
+  a dynamically allocated array, only the first pointer will be deleted but everything else.
+  **Compiles but leads to UB**
+
+**auto_ptr** (deprecated)
+* wraps around a pointer and calls the destructor of the pointer once it goes out of scope
+  ```cpp
+  void f() {
+    std::auto_ptr<Foo> f(new Foo());
+  }
+  ```
+* Drawbacks:
+  * Does not exhibit normal copy constructor and copy assignment behaviour. The objects are "moved"
+  instead of being copied
+    ```cpp
+    std::auto_ptr<Foo> f1(new Foo()); // f1 points to the new Foo
+    std::auto_ptr<Foo> f2(f1)         // f2 points to the previous new Foo
+                                      // f1 now points to null
+
+    f1 = f2;                          // f1 points to the previous new Foo but
+                                      // f2 points to null
+    ```
+  * Will not work in STL containers as it require elements to exhibit normal **copying behaviour**.
+
+**shared_ptr**
+
+* Uses reference-counting to determine if the resource can be deleted.
+  * Every time the object (`shared_ptr`) is copied/assigned it will increase the reference.
+  * Call destructor on the pointer once the counter goes to 0.
+* **Caveats**: Cannot break cycles. If two objects that are unused has a reference to each other,
+  the counter will never go 0.
+  * Unlike Java GC, there is no **mark**, **sweep**, **merge** steps to determine if an two objects
+  are stuck in a cyclic reference
+
+### Item 14: Think carefully about copying behaviour in resource-managing class
+
+You can implement your own RAII to manage heap resource. However, based on your
+requirements, you might want to handle copying separately.
+* **Prohibit Copying**
+  * If a resource should not be copied (Lock) for a mutex, use [Uncopyable](#item-6-explicitly-disallow-the-use-of-compiler-generated-functions-you-do-not-want)
+* **Reference Counting**
+  * If the resource should be destroyed once all references to has been deleted.
+  * Use a `shared_ptr` data member.
+  * If we do not want to delete the underlying resource (unlocking a mutex instead of deleting),
+    we can provide `shared_ptr` with a **deleter** funtcion. This will cause the `shared_ptr` to
+    call the function instead of the destructor of the resource.
+  * Copying the underlying resource (more than one of the resource could exists), we should perform
+  a deep copy of the data in the heap instead of just copying the pointer.
+
+### Item 15: Provide access to raw resource in resource-managing classes
+
+There are times you would need to access the underlying heap based resource
+from an RAII. You can use the following approach:
+* Explicit conversion:
+  * Provide a `raii.get()` function to get the underlying heap based resource
+  * Overload pointer dereferencing operator (`->`)
+  * Drawbacks: might be intrusive to the code
+* Implicit conversion:
+  * Allow casting from `raii` to the underlying heap based resource pointer.
+  * Allow clients to easily use api that require heap based resource pointer without
+  having to call explicit conversion
+  ```cpp
+  class RAII {
+  private: 
+    Foo f;                              // heap based resource
+  public: 
+    operator Foo() const{return f;}     // Overload casting operator to return
+                                        // the underlying resource when casted to it
+  }
+  void Bar(Foo f);                      // Require heap based resource
+  RAII r;
+  Bar(r); // cast RAII to Foo
+  ```
+  * Drawbacks: allowed accidental casting from RAII to the underlying resource.
+
+### Item 16: Use the same form in corresponding uses of `new` and `delete`
+
+We should always use `delete[]` iff `new T[]` was used and `delete` iff `new T`
+was used.
+
+The reason is that when we call `delete[]` or `delete` on address we do not
+validate what the address contains and call the destructor on the memory.
+When we call `new` or `new T[]` the heap will look like (depends on compiler):
+
+```txt
+Single  Object: | Object |
+Array         : | n | Object | Object | Object |   
+```
+
+* Calling `delete[]` on a single object will result in the first `k` bytes being assumed to be
+the size of the array (but is actually part of the Object) and the destructor will be called
+on the next contiguous `n'` location in memory.
+* Calling `delete` on an array will result in the address for the size of the array to be deleted
+and part of the first object to deleted.
+
+### Item 17: Store `newed` objects in smart pointers in standalone statement
+
+To guarantee that there will be no resource leak when using smart pointers, we
+will need to make sure that no exceptions are thrown between heap based resource
+being allocated and smart pointer being constructed.
+
+The easy solution is to store `new` object in smart pointer in a standalone statement
+that guarantees no exceptions thrown
+
+Negative example:
+```cpp
+processWidget(shared_ptr<Widget>(new Widget), foo());
+```
+* We will need to perform the following argument evaluations:
+  * Execute `new Widget`
+  * Construct `shared_ptr`
+  * Call `foo`
+* In cpp, the compiler is allowed to reorder the evaluations of arguments
+* Compiler can reorder to: Execute `new Widget` -> Call `foo` -> Construct `shared_ptr`
+  * If there is an exception in `foo`, the `new` Widget would be leaked and will not be
+  cleaned up by `shared_ptr`
+
+
+## Chapter 4: Design and Declarations
+
+### Item 18: Make interfaces easy to use correctly and hard to use incorrectly
+
+Good API design should prevent any client errors by making it easy to use and 
+hard for the clients to use incorrectly. We can do so with the following methods:
+* Strongly typed parameters:
+  * When a function takes in multiple parameters of similar type, client could easily make
+  mistakes by using the wrong ordering of parameters
+  * If there is a small range of allowed argument for a parameter, use class function
+  as a constructor.
+  ```
+  struct Month {static Month::Jan(){return Month(1)}};
+  struct Day {};
+  struct Year {};
+  Date d(Month::Mar(), Day(30), Year(1995))
+  ```
+* Return `const` to prevent invalid assignment
+* Return smart pointers
+  * Do not rely on client calling delete
+  * `shared_ptr`: Allow you to add your own `deleter` to perform clean up once the references go to 0
+* Interface should be consistent with standard library interfaces
+
+### Item 19: Treat class design as type design
+
+This item mainly state the various questions we should ask ourselves when designing a new type.
+
+### Item 20: Prefer pass-by-reference-to-const to pass-by-value
+
+**Pass-by-value**
+* Make a copy of the actual argument. Calls the copy constructor of all the data members and base class
+* By default all arguments are passed by value
+* **Object Slicing**: Derived object slice off derived class data members when copying.
+  * Pass a derived class to a function that takes in the base class
+  * Causes the **only the base class** copy constructor to be called on the derived object
+* Applies to user defined type with small constructor
+  * Compiler treats user-defined type differently from built-in types
+  * The constructor overhead of user-defined types might change
+* **Exceptions**:
+  * Built-in types: same overhead as passing a pointer
+  * stl iterator: act as pointers
+  * function objects
+
+
+**Pass-by-reference-to-const**
+* When we pass by reference we are essentially passing a pointer as an argument to the function
+* Use const so that the caller will know that argument would not be mutated
+
+### Item 21: Don't try to return a reference when you must return an object
+
+When returning an object as reference from the local stack (function body), the object will destructed
+once it returns. The reference that the function returns will point to an object that is destructed.
+
+**Notes**
+* Returning reference of object on stack:
+  * Objects would be destructed at the end of the function
+  * Reference to destructed object will still be returned -> leads to UB
+* Returning reference of to object on heap:
+  * Easily lead to memory leak as we do not know who should delete the object
+
+### Item 22: Declare data members `private`
+
+This items argues why data members should be private and does not cover any c++
+specific points.
+
+Arguments:
+
+* Syntactic consistency
+* Encapsulation: allow you to easily change the implementation of the data member.
+  * ie: changing the data member from a member variable to a combination of member variables
+
+### Item 23: Prefer non-member non-friend functions to member functions
+
+This item mainly applies to member functions that does not actually
+require to be a member function (utility functions)
+
+**Member function** drawbacks:
+* Reduces encapsulation as it exposes internal data members
+* Does not allow separation of utility functions.
+  * If a client imports a class, it will have to import all
+  utility functions instead of what they just need
+
+**Solution**: Create multiple header files that contains different type of utility functions
+on the same class
+
+### Item 24: Declare non-member functions when type conversion should apply to all parameters
+
+How type conversion works:
+1. Given a type `T1` and the object can only be constructed from type `T2`
+  * type coversion will work if there is conversion from `T2 -> T1`.
+2. A temporary `T2` object will be created from `T1` with `T2(T1)`
+3. `T2` will be provided as argument to the object's constructor
+
+How operators work:
+1. For operators (`*`, `+`, ...), the compiler will try to look for valid operator
+declared in the namespace scope to perform the operator on the 2 parameter
+2. Type conversion will be used if the operator is not `explicit`
+
+For operators that should perform implicit conversion on lhs/rhs, use non-members
+so that both the parameters can be converted.
+
+```cpp
+class Rational {
+
+}
+const Rational operator*(const Rational& lhs, const Rational& rhs)
+
+Rational oneForth(1,4);
+Rational result;
+result = oneForth* 2 // convert 2 to Rational
+result = 2* operator // convert 2 to Rational
+```
+### Item 25: Consider support for a non-throwing swap
+
+* Swap operations should not throw exceptions as many operations
+rely on swap operations to prevent memory leak
