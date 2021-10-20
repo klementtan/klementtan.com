@@ -872,3 +872,113 @@ result = 2* operator // convert 2 to Rational
 
 * Swap operations should not throw exceptions as many operations
 rely on swap operations to prevent memory leak
+
+## Chapter 5: Implementations
+
+### Item 26: Postpone variable definition as long as possible
+
+This item argues that we should defer any variable definition
+to as long as possible. This includes:
+* Defining the variable right before it is needed:
+  * Prevent unneccassary calls to the constructor if an exception
+  is thrown or returned before it is used.
+  ```cpp
+  ...
+  string encrypted;
+  if (...) throw exception; // encrypted is constructed and destructed
+  foo(encrypted);
+   ```
+* Do not define a variable with default constructor then assign it to a new
+value afterwards
+  * Prevent extra call to constructor then copy assignment when you could just
+  have a single call to copy constructor
+  ```cpp
+  ...
+  string encrypted;
+  encrypted = password;
+  foo(encrypted);
+  //vs
+  string encrypted(password);
+  foo(encrypted);
+  ```
+
+### Item 27: Minimize casting
+
+Types of cast
+* C-style: `(T) expression`
+* Function style: `T(expression)`. Call the type's cast function
+* C++ style:
+  * `const_cast<T>(expression)`: cast away the const from an object
+  * `dynamic_cast<T>(expression)`: cast from a base class to a derived class. Determine polymorphic type in runtime
+  * `reinterpret_cast<T>(expression)`: casting a pointer to an int (for low level)
+  * `static_cast<T>(expression)`: for implicit conversion (ie int to double)
+
+Problems with casting:
+* When casting a derived **object** to base **object** with `static_cast`. C++ will create a temporary copy of the base
+object and call the function on it.
+  * Solution is to call base class function directly `Base::foo()` in the derived class function
+* `dynamic_cast` is slow: under the hood performs string matching to the class name
+  * if you find yourself doing multiple `if(auto t = dynamic_cast<T>(ptr))` a lot should use virtual functions instead
+
+
+### Item 28: Avoid returning "handles" to object internals
+
+We should avoid returning a handler (reference, pointer, iterator)
+to an internal data structure in member functions.
+
+Rationale:
+* If the return type is not const, it will allow the client side to modify internal
+data member using the member function.
+* Result in dangling handles, if a temporary object is created and only the handler is
+assigned to a variable. The temporary object will destroyed but the handler will be left dangling.
+
+### Item 29: Strive for exception-safe code
+
+**Goals of exception-safe function**
+* **Leak no resource**: should not leak any resource
+* **Don't allow data structure to become corrupted**: A function should not be in an
+invalid state no matter what
+
+**Types of exception-safe guarantees**
+* **Basic guarantees**
+  * When an exception is thrown a program will be in a valid state. Might be a the same state before exception is thrown
+* **Strong guarantees**
+  * State changes are atomic. When an exception is thrown a program will revert to the previous state before the exception is thrown
+* **Nothrow guarantees**
+  * function does not throw any exception
+
+It is ok to only offer **basic guarantee** (depend on **basic guarantee** code) but should
+not be non exception-safe.
+
+#### How to achieve exception-safe
+
+The general way to achieve exception-safe is to use the Pimpl idiom with copy and swap
+* Use pimpl to allow the underlying data member to be easily copied to a temp copy 
+* Perform necessary changes to the temp copy
+* Swap the temp copy to replace the current copy
+
+```cpp
+struct  PMImpl {
+  std::shared_ptr<Image> bgImage;
+  int imageChanges;
+}
+
+class PrettyMenu {
+private:
+  Mutex mutex;
+  std::shared_ptr<PMImpl> pImpl;
+  void changeBackGround(std::istream& imgSrc) {
+    using std::swap;
+    Lock ml(&mutex);                                  // use RAII to prevent resouce leak
+    std::shared_ptr<PMImpl> pNew(new PMImpl(*pImpl)); // create a temporary copy of impl
+    pNew->bgImage.reset(new Image(imgSrc));
+    ++pNew->imageChanges;
+
+    swap(pImpl, pNew);                                // only change state if no exception
+  }
+}
+```
+
+* Caveats: Pimpl + copy and swap will only work when there are no side effects to outside the local data state.
+
+
