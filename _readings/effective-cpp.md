@@ -981,4 +981,131 @@ private:
 
 * Caveats: Pimpl + copy and swap will only work when there are no side effects to outside the local data state.
 
+## Chapter 7: Template and Generic Programming
+
+**Introduction** Templates were initially created to allow for type-safe containers (`vector`).
+However, it has evolved to be a turing complete stack. The compile will execute and run
+the metaprogram in compile time and complete the execution when the program exits.
+
+### Item 41: Understand implicit interfaces and compile time polymorphism.
+
+Traditionally we use explicit interface and runtime polymorphism.
+* **Explicit interface**:
+  * Interface of a class/struct.
+  * Users will be able to look up the type and view the function signature
+* **Runtime polymorphism**:
+  * Only at runtime we will know what virtual function to call using virtual pointer.
+
+
+Metaprogramming allows for **implicit interface** and **compile time polymorphism**.
+
+How it works: at compile time, the compiler will take the function template and the template
+argument (the actual type to be supplied) and synthesize/instantiate a function
+with that type.
+
+#### Implicit interface
+
+Instead of having an explicit interface stating the member functions and variables.
+With templates, you will state the functions that you would like use for the generic
+type and the compiler will check if the supplied template at compile time support
+these functions (technically it should be expressions).
+
+```cpp
+template<typename T>
+void doProcessing(T& w) {
+  if(w.size() > 10 && w != someNastyWidge) {
+    T temp(w);
+    temp.normalize();
+    temp.swap();
+  }
+}
+```
+* Compiler will only compile if `w` has `.size(),`, `.normalize()` and `.swap()`
+
+#### Compile time polymorphism
+
+At compile time, the compiler will synthesize the function template for that specific
+supplied type. This will let the correct function for each type to be called instead
+of relying on virtual functions.
+
+For example:
+
+```
+Foo("ssss");
+Foo(1234);
+```
+* The same function template (Foo) will be synthesized for string and int. It will call the
+respective int/string member function and thus allowing for polymorphism.
+
+### Item 42: Understand the two meaning of `typename`
+
+I am still a bit confused with this item.
+
+Different `type`s in a template:
+* **dependent** name: when a named type is dependent on a template type. ie `T::foo`
+* **nested dependent** name: a dependent type that is nested inside a class.
+* **non-dependent** name: any type that is not dependent on the template type. ie `int`
+
+Problem with **nested dependent**: when using nested dependent type, we do not know if `T::foo` is another 
+type or is a static variable. To solve this, use `typename` at the front.
+
+```cpp
+template<typename C>
+void Foo(const C& cont) {
+  typename C::const_iterator iter;
+}
+```
+
+## Chapter 8 customizing `new` and `delete`
+
+C++ allows you to define a callback function (`new_handler`) to be executed when it fails to
+allocate new memory.
+
+### Item 49: Understand the behaviour of new-handler
+
+**How it works**
+1. Declare custom `new_handler`. This would apply to all `new` operations.
+  * `set_new_handler` returns the previous `new_handler`.
+  ```cpp
+  std::set_new_handler(outOfMem);
+  ```
+2. When `new` is called
+  * Sufficient memory: nothing happens and the memory gets allocated
+  * Insufficient memory:
+    * Keep calling the latest function of `set_new_handler(...)` until there is an exception
+    or sufficient memory allocated
+
+As `new` will be recursively called, `new_handler` should have one of the following properties:
+* Make more memory available: Next `new` call would have sufficient memory
+* Install a different new-handler: Will not call the same function again and stuck in infinite loop
+* Deinstall new-handler: set `set_new_handler(nullptr)` so that no function would be called and will
+use the default exception
+* Throw an exception: of type `bad_alloc`
+* Not return: call abort or exit
+
+#### Class specific new handler
+
+Challenges:
+* Need to call `set_new_handler(fooHanlder)` and `set_new_handler(oldHandler)` after the new operation
+* Will need to handle when there is an exception when calling `new`
+
+Solution:
+* Treat `new_handler` as a resource and wrap it in a RAII.
+* Use Curiously Recurring Template Pattern (CRTP) to make a mixin base class that could be inheritted by
+multiple classes
+* (Klement: I do not really understand the solution proposed in the book but you can refer to it if you would 
+to view the actual implementation)
+
+### Item 52: Write placement `delete` if you write placement `new`
+
+**Definition placement new and delete**: When `new` is called it usually
+calls the `static void* operator new(std::size_t size)` member function.
+However, we can declare our own new operator that accepts more than `size_t`
+parameter.
+* ie `static void* operator new(size_t size, ostream& logstream)`
+
+Placement new with address:
+* `static void* operator new(size_t size, void* ptr)`
+* Allow you to construct an object on the given address instead of allocating new memory
+* Used in vectors
 
