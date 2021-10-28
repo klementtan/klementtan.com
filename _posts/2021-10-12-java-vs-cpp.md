@@ -4,6 +4,7 @@ categories:
   - Post
 tags:
   - Programming Language
+excerpt: "A comparison of C++ and Java"
 ---
 
 In this post I will try to holistically compare the differences between Java and C++.

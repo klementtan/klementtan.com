@@ -20,6 +20,8 @@ foo:
 
 # main links
 main:
+  - title: "Posts"
+    url: /year-archive/
   - title: "Readings"
     url: /readings/
   - title: "Leetcodes"

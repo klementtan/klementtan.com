@@ -4,6 +4,7 @@ categories:
   - Post
 tags:
   - OS
+excerpt: "An overview of OS memory management"
 ---
 
 In this post I will briefly describe how does an operating system handle memory management.
