@@ -981,6 +981,154 @@ private:
 
 * Caveats: Pimpl + copy and swap will only work when there are no side effects to outside the local data state.
 
+### Item 30: Understand the ins and out of inlining
+
+Overhead of a function call:
+* Saving the current registers on the current function stack
+* Pushing the new function argument into the new function stack
+* Increment the stack pointer
+* Jump to the new instruction of the new function
+* When the function is done, need to restore the previous function stack
+
+`inline` functions:
+* **Request** the compiler to replace the call to function with the block of code
+* For small function body will increase **instruction cache hit rate**.
+* Types of inline request
+  * implicit: define the function within the class 
+    ```cpp
+    class Person {
+    public:
+      ...
+      int age() const { return theAge; } // an implicit request
+    }
+    ```
+  * explicit: using `inline` keyword before the function.
+
+**Caveats**:
+* Constructors and destructors might seem like good inline functions but under the hood,
+they are long functions that have code to construct the data members
+* How the function is called matters: Function pointer to inline function would 
+cause the inline function to be generated out of line.
+  ```cpp
+  inline void f() {...}
+  void (*pf)() = f;
+  ... 
+  f();  // inlined
+  pf(); // most probably wont be inlined
+  ```
+* **DLL**: if a library uses inline function, the client must recompile the library instead of
+just relinking a non-inline function
+
+### Item 31: Minimize compilation dependencies between files
+
+**Problem**:
+
+* There could be a cascading compilation dependencies when the declaration and definitions are
+coupled together.
+  * A client only cares about the public functions and not the private data members. 
+  * Coupling the declaration and definitions (private data members) would result in the client
+  having to recompile when there is a change in private data member's code.
+  ```cpp
+  #include <string>
+  #include "date.h"
+  #include "address.h"
+  class Person {
+  public:
+    Person(const std::string& name, const Date& birtday, const Address& addr);
+    std::string name() const;
+    std::string birthDate() const;
+  private:
+    std::string theName;
+    Date theBirthDate;
+    Address theAddress
+  }
+  ```
+
+**Solution**:
+  * **pimpl**
+    * Only declares functions and no data members
+    * Implement by forwarding the function call to the `impl`
+  * Forward declare types
+    * Forward declare custom type so that if the client doesn't need the custom type, they do not
+    need to depend on it.
+    * If the client need the custom type they will just include the custom type header file instead
+    of relying on your header file.
+    * Separate forward declaration to `*fwd.h` to a separate header file that just forward declares.
+  * **interface**
+    * Having an abstract base class that does not contain any data members. Having a pointer to abstract
+    class with factory function will allow the client not having to include unneccassary dependencies.
+
+## Chapter 6: Inheritance and Object-Oriented Design
+
+### Item 32: Make sure public inheritance models "is-a"
+
+**Public Inheritance**: the derived class will have access to all public members (function and data)
+of the base class. The derived class does not have access to private data members (need to access through
+public function of base class).
+
+**Take aways**: All derived class should "is-a" base class. This would allow the compiler
+to prevent the derived class from having properties it should not have at compile time.
+
+### Item 33: Avoid hiding inherited names
+
+Unlike other PL like Java, overriding a function would hide all functions in the base class with the
+same name (does not distinguish between function signature)
+
+```cpp
+class Base {
+private:
+  int x;
+public:
+  virtual void mf1() = 0;
+  virtual void mf1(int);
+
+  virtual void mf2();
+
+  void mf3();
+  void mf3(double);
+};
+class Derived: public Base {
+public:
+  virtual void mf1();
+  void mf3();
+  void mf4();
+}
+
+Derived d;
+int x;
+
+d.mf1();  // calls Derived::mf1
+d.mf1(x); // error! Base class mf1(int) got hidden
+```
+
+Rationale: C++ chose to hide all function names irregardless of function signature as it
+
+**Solution**: use `using`
+```cpp
+class Derived: public Base {
+public:
+  using Base::mf1;
+  using Base::mf3;
+  virtual void mf1();
+  void mf3();
+  void mf4();
+}
+```
+
+* Use this method if you inherit a base class and you want to redeclare or override some but
+not all functions
+
+Forward functions
+
+```cpp
+class Derived : private Base {
+public:
+  virtual void mf1() 
+  { Base::mf1(); }
+}
+```
+
+
 ## Chapter 7: Template and Generic Programming
 
 **Introduction** Templates were initially created to allow for type-safe containers (`vector`).
