@@ -1072,7 +1072,7 @@ to prevent the derived class from having properties it should not have at compil
 ### Item 33: Avoid hiding inherited names
 
 Unlike other PL like Java, overriding a function would hide all functions in the base class with the
-same name (does not distinguish between function signature)
+same name (**does not distinguish between function signature**)
 
 ```cpp
 class Base {
@@ -1128,6 +1128,65 @@ public:
 }
 ```
 
+### Item 35: Consider alternative to virtual functions
+
+This item mainly talks about alternate design pattern we could use to acheive
+polymorphism over virtual functions. Aka Non-Virtual Interface (NVI) Idiom.
+
+**Template Method Pattern**
+
+This pattern is not related to c++'s template programming. The essence
+of this pattern is  to declare **all virtual function private** and create
+a **public wrapper function** that would call the virtual functions.
+
+As virtual function are private in base class, derived class can **only redefine**
+the function but **cannot call it**.
+
+
+Advantage: allows the base class to inject context into the call of virtual functions. Ie
+perform before virtual call tasks (lock mutex) or after virtual call task (unlock mutex)
+
+```cpp
+class GameCharacter {
+public:
+  int healthValue() const
+  {
+    // perform before task
+    int ret = doHealthVal();
+    // peform after task
+    return ret;
+  }
+private:
+  virtual int doHealthValue() const {
+    ...
+  }
+};
+```
+
+**Strategy Pattern via `std::function`**
+
+For polymorphism that is independent of the class (ie health is independent of `GameCharacter`),
+have a member variable that stores a call back function to execute the polymorphic task.
+
+The constructor or member function of the class will take in `std::function` as an argument
+and have another member function that wraps around the call back function.
+
+Advantage: separate the health calculation and game character logic. Allow for change
+in polymorphic function in runtime.
+
+
+```cpp
+class GameCharacter;
+int defaultHealthCalc(ocnst GameCharacter& gc);
+
+class GameCharacter {
+public:
+  typedef std::function<int (const GameCharacter&)>  HealthCalcFunc;
+  explicit GameCharacter(HealthCalcFunc hcf = defaultHealthCalc) : healthFunc(hcf) {}
+  int healthVal() const
+  { return healthFunc(*this); }
+};
+```
 
 ## Chapter 7: Template and Generic Programming
 
