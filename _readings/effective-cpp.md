@@ -1187,6 +1187,92 @@ public:
   { return healthFunc(*this); }
 };
 ```
+### Item 36: Never redefine an inherited non-virtual function
+
+This item argues that a derived class should never redefine a non-virtual function from a base class.
+
+**Practical Reason**: non-virtual functions are statically bound. This means that 
+the correct non-virtual function to be invoked is determined statically (compile time?)
+by the Type of the object/pointer. This would mean that the `non-virtual` function for a derived
+class could behave differently when it is called directly to the object or type cast to a reference
+of the base class. Ie
+
+```cpp
+clas B {
+public:
+  void mf();
+};
+class D : public B {
+public:
+  void mf();
+};
+
+D x;
+B *pB = &x;
+D *pD = &x;
+pB->mf(); // calls B::mf()
+pD->mf(); // calls D::mf()
+```
+
+**Theoretical reason**: If a derived class is needs to redefine a non-virtual function, this means
+that the derived class no longer **is-a** base class and violates [Item 32](#item-32-make-sure-public-inheritance-models-is-a)
+principles.
+
+### Item 37: Never redefine a function's inherited default parameter value.
+
+**Definitions**:
+* Static Type: The type you declare it in the program
+* Static Bound: The property of the object is determined by the static type
+* Dynamic Type: The type of object it currently refers to
+* Dynamic Bound: The property of the object(function/default param) is determined from the dynamic type
+
+**Problem**: default parameters are statically typed.
+
+This means that if the derived class default parameter differs from the base class default parameter,
+calling the virtual function on a derived class cast as base class, the derived class function would be
+invoked but with the base class default value.
+
+```cpp
+class Shape {
+  enum ShapeColor {Red, Green, Blue};
+  virtual void draw(ShapeColor color = Red) const = 0;
+};
+class Rectangle : public Shape {
+  enum ShapeColor {Red, Green, Blue};
+  virtual void draw(ShapeColor color = Green) const;
+};
+Shape *pr = new Rectangle;
+pr->draw(); // Invokes Rectangle::call(Shape::Red);
+```
+
+**Why c++ implement this**: C++ chose to implement this behaviour to allow for
+runtime efficiency. At runtime you do not need to find what polymorphic default
+parameter to use.
+
+**Solution**
+1. All class basee and derived class use the same default parameter.
+  * This is bad as there would be a lot of code duplication and dependencies.
+  Changing the default value in one class would result in all classes default value
+  being changed
+2. Use NVI idiom. Wrap the virtual function with a non-virtual function and the non-virtual function
+  can define a default parameter that would be invoked for all classes' virtual function.
+
+### Item 38: Model "has-a" or "is-implemented-in-terms-of" through composition
+
+Composition is a very technique any SWE uses when designing an object. This item provides
+an interesting mental model on when to use composition. I have never heard of this
+technique before and it seems pretty good.
+
+Definitions:
+* Application domain: objects that corresponds to things in a real world (ie people, vehicles and etc)
+* Implementation domain: purely implementation objects (mutex, buffers, etc)
+
+When to use composition:
+* **has-a** relationship in application domain should use composition over inheritance. Person has a
+name data member instead of inheriting from name
+* **is-implemented-in-terms-of** relationship in implementation domain should use composition. When
+implementing a set with set with a underlying linked list data structure, you do not inherit a linked list
+but instead have a linked list data member and member functions that calls linked list functions.
 
 ## Chapter 7: Template and Generic Programming
 
