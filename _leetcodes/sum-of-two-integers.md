@@ -1,4 +1,3 @@
-
 ---
 title: "371: Sum of Two Integers"
 excerpt: Add two integers without +/-
@@ -13,10 +12,10 @@ tags:
 
 **Problem ID**: [371](https://leetcode.com/problems/sum-of-two-integers/)
 
-**Title**: Longest Common Subsequence
+**Title**: Sum of Two Integers
 
-**Description**:
-Given two integers a and b, return the sum of the two integers without using the operators + and -.
+**Description**: Given two integers a and b, return the sum of the two integers
+without using the operators + and -.
 
 
 ## Thoughts
