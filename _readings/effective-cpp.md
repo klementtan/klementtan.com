@@ -1274,6 +1274,76 @@ name data member instead of inheriting from name
 implementing a set with set with a underlying linked list data structure, you do not inherit a linked list
 but instead have a linked list data member and member functions that calls linked list functions.
 
+### Item 39: Use private inheritance judiciously
+
+This item cover the subtle but important characteristics about private inheritance.
+I was always under the impression that the purpose of private inheritance was
+solely for access to private data members.
+
+Private inheritance behaviour:
+
+* Compiler does not convert private derived class to base class
+  ```cpp
+  class B {};
+  class D : private B{};
+  void foo(B* ptr);
+  ...
+  D* d = new D;
+  foo(d); // compilation error
+  ```
+* All members (data and functions) inherited from private base class becomes private members
+of the derived class
+
+Purpose of private inheritance: Another form of "is-implemented-in-terms-of" implementation.
+
+* All public interface of private base becomes private members of derived means that derived
+"is-not-a" base class
+* Unlike composition in Item 38, private inheritance allows derived class to have access
+to the private data member of the underlying implementation of. This allows for more
+flexibility if you need the underlying implementation of data.
+* Allow for redefining virtual function of the implement of base class.
+* Unlike composition, private inheritance allow for empty class optimisation.
+  * If a derived class privately inherit an empty base class, there would not
+  be any additional space overhead.
+
+### Item 40: Use multiple inheritance judiciously
+
+Unlike Java, C++ allows for multiple inheritance. However, there are a few benefits and
+drawbacks of multiple inheritance.
+
+
+**Ambiguity**: When a derived class inherits from two different base class with the same
+member name. Note that there will still be ambiguity even if one of the member is
+accessible while the other is not. This is due to the compiler identifying the corresponding
+member before checking for access (similar to item 33).
+
+*Solution*: Call the specify the correct base class member you would like to refer to. Ie
+`ie.BoroowableItem::checkOut()` instead of `ie.checkOut()`
+
+#### Multiple Inheritance Diamond
+
+When you inherit from two base class which in turn inherit from the same base class.
+
+Problem: This would result in two separate instance of an ancestor class from a single class.
+
+
+**Solution**: use virtual inheritance. This would result in only one instance of the common
+ancestor to be instantiated.
+
+**Multiple inheritance use case**:
+Easily implement interface and utilise existing classes implementation (is-implementation-in-terms-of).
+* Publicly inherit an abstract class (interface)
+* Privately inherit a base class. Reuse the implementation of the base class.
+
+**Virtual Inheritance Drawbacks**:
+
+* There is an overhead when accessing data members of virtual base classes (details depends on compiler).
+* Derived class needs to be aware of all virtual ancestor no matter how far away (additional overhead)
+
+**Drawbacks mitigation**: Avoid adding data members to the virtual base class (similar to Java interface).
+This would prevent additional overhead of accessing virtual base class data members.
+
+
 ## Chapter 7: Template and Generic Programming
 
 **Introduction** Templates were initially created to allow for type-safe containers (`vector`).
