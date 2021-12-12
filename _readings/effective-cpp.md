@@ -1419,6 +1419,143 @@ void Foo(const C& cont) {
 }
 ```
 
+### Item 43: Know how to access names in templatized base class
+
+**Problem**:
+* When a template class inherits a base template class, the compiler will not
+let you call the base class function in the derived class.
+* Why: the compiler prevents this as the base template class could have a total specialisation
+which could result in the base class having a completely different interface.
+
+**Solution**:
+* Call the base class function with `this->`
+* Employ `using` declaration technique. `using Base<T>::foo;`
+* Call the base class function directly `Base::foo(...)`. Not ideal as it would not work
+for virtual functions.
+
+**Note**: If there is full template specialisation that removes the function and 
+the techniques above were used, there will compilation error. However, this would
+occur later when the template is synthesized.
+
+### Item 44: Factor parameter-independent code out of templates
+
+I do not really understand the examples for the this item but I believe I understand the main takeaways of it.
+
+All templates in C++ are just templates for functions/class. Thus, having more than
+necessary template parameters could result in more than necessary synthesized template
+class or functions.
+
+Refactor out any template parameter that are independent of the code (usually non types parameters)
+and pass the template parameter as a function parameter instead. This will allow lesser
+synthesisation of templates that just differ by that parameter.
+
+### Item 45: Use member function template to accept "all compatible types"
+
+Problem: If you would like to cast a template class of type `U` to the same template class
+but of type `T`.
+
+Solution: Use a member function that takes in any type. This would allow you to perform implicit
+type conversion from `U` to `T` inside the template class.
+
+```cpp
+template<class T>
+class shared_ptr {
+public:
+  shared_ptr(shared_ptr const& r);
+  template<class Y>
+  shared_ptr(shared_ptr<Y> const& r); // allow for implicit type conversion
+  shared_ptr& operator=(shared_ptr const& r); // copy assignment
+  template<class Y> 
+    shared_ptr& operator=(shared_ptr<Y> const& r); // copy assignment
+}
+```
+Note: You will need to declare the normal copy constructor and assignment to allow as
+the compiler can still create its own constructors
+
+### Item 46: Define non-member functions inside templates when type conversion are desired.
+
+If a function needs to take 2 parameter with the same template type but the 2 provided arguments do
+not have the same type will lead to compilation error.
+
+Why error: Unlike normal functions, template arguments deduction never perform **implicit type conversion**.
+The function does not know which type to keep and which type to convert
+
+Solution: use friend function to set the first argument as the main type and typecast the others which would call
+the template function with the same types now.
+
+
+```cpp
+template<typename T>
+const Rationale<T> doMultiply(const Rationale<T>& lhs, const Rationale<T>& rhs) {
+  return Rationale<T>(lhs.numerator* rhs.numerator, lhs.denomerator*rhs.denomerator);
+}
+
+template<typename T>
+class Rationale {
+  // rhs will be cast to type T
+  friend const Rationale operator*(const Rationale& lhs, const Rationale& rhs) {
+    doMultiply(lhs, rhs)
+  }
+};
+```
+
+### Item 47: Use traits classes for information about types
+
+I do not really understand this example but the main takeaway is that if you would like perform
+different logic for different types, have the custom class expose the same public data member (`iterator_category`)
+and a traits class (`iterator_traits`) that will parrot the type out.
+
+To further allow the different types to handled differently in compile time, we can overload different function with the explicit types in parameters.
+
+Type tags: Are simple empty struct class that acts as a enum
+
+```cpp
+template<...>
+class deque {
+public: 
+  class iterator {
+    public:
+      // assign tag to the calls
+      typedef std::random_access_iterator_tag iterator_category;
+  }
+}
+template<...>
+class list {
+public: 
+  class iterator {
+    public:
+      typedef std::bidrectional_iterator_tag iterator_category;
+  }
+}
+
+template<typename IterT>
+struct iterator_traits {
+  typedef typename IterT::iterator_category iterator_category; // parrot out category
+}
+
+// partial speicialisation: only apply to all pointer types
+template<typename T*>
+struct iterator_traits {
+  typedef random_access_iterator_tag iterator_category; // set all pointer types to random_access_iterator_tag
+}
+
+// overloaded function for random_access_iterator_tag only
+void doAdvance(IterT& iter, DistT d, std::random_access_iterator_tag) {
+  return iter += d;
+}
+void doAdvance(IterT& iter, DistT d, std::bidrectional_iterator_tag) {
+  ...
+}
+
+template<typename IterT, typename DistT>
+void advance(IterT& iter, DistT d) {
+  doAdvance(iter, d, 
+    typename std::iterator_traits<IterT>::iterator_category()) // get the category for the IterT
+}
+
+```
+
+
 ## Chapter 8 customizing `new` and `delete`
 
 C++ allows you to define a callback function (`new_handler`) to be executed when it fails to
@@ -1458,6 +1595,60 @@ Solution:
 multiple classes
 * (Klement: I do not really understand the solution proposed in the book but you can refer to it if you would 
 to view the actual implementation)
+
+### Item 50: Understand when it makes sense to replace `new` and `delete`
+
+This item lays down a few use cases for why we should use a custom `new` and `delete`
+
+Use Cases:
+* **Detect usage errors**:
+    * Custom `new` and `delete` can keep a list of `new`ed and `delete`d memories. This would let you detect if delete an address from outside the list
+    * Over allocate blocks so there is room to put signature before and after the memory. When you call delete, check the signature are still intact.
+    * Caveats: alignment of memory is very important. On some systems, pointers need to be *four-byte aligned* and failure to do so could result in hardware
+    exception. On other systems(Intel x86) doubles that are eight-byte aligned can be accessed much faster. Malloc will return pointers that are properly aligned
+    but adding the signature before might misalign it.
+      ```cpp
+      static cosnt int signature = 0xDEADBEEF;
+      typedef usgined char Byte;
+      void* operator new(std::stize_t size) throws(std::bad_alloc) {
+        using namespace std;
+        size_t realSize = size + 2 * sizeof(int);
+        void *pMem = malloc(realSize);
+        if (!pMem) throw bad_alloc();
+
+        *(static_cast<int*>(pMem)) = signature;
+        *(reinterpret_cast<int*>(static_cast<Byte*>(pMem) + realSize - sizof(int))) = signature;
+        return static_cast<Byte*>(pMem) + sizeof(int);
+      }
+      ```
+* **Improve efficiency**:
+    * Default `new` need to worry about heap fragmentation (pocket of unused spaces within the heap). 
+    * Writing a thread-unsafe `new` and `delete` for single threaded systems.
+* **Collect usage statistics**:
+    * Allow you to collect all kind of stats for `new` and `delete` usage
+* **Cluster related objects near one another**:
+    * If certain objects are used closely with one another, you can allocate them near each other to utilise the cache spatial locality.
+
+### Item 51: adhere to convention when writing new and delete
+
+Requirements:
+* right return value (pointer)
+* If failed to allocate memory keep calling the new-handling-function([item 49](#item-49-understand-the-behaviour-of-new-handler)) if present else throw `bad_alloc`
+* Return a legitimate pointer if *zero* bytes requrested. 
+
+Caveats
+* Handle when the derived class calls the base class custom operator `new`
+    ```cpp
+    class Base {
+    public:
+      static void operator new(std::size_t size) throw(std::bad_alloc) {...}
+      class Derived : public Base { ... };
+      Derived* p = new Dervied // calls Base::operator new
+    }
+    ```
+* If you want to customise the operator `new` for array, you will need write a custom `operator new[]`
+    * You do not know the size and number of each element. `Base[]` might store `Derived` 
+    * `size_t` supplied might be more than required memory for all elements as dynamically allocated array might add meta data ([item 16](#item-16-use-the-same-form-in-corresponding-uses-of-new-and-delete))
 
 ### Item 52: Write placement `delete` if you write placement `new`
 
