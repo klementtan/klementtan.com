@@ -11,6 +11,9 @@ Author: Scott Meyers
 
 ## General Review
 
+Personal notes for effective C++. Although this book is based on the legacy C++ versions,
+it still cover key principles of the language. It also highlights corner cases that could be detrimental to the project.
+
 ## Chapter 1
 
 ### Item 1: View C++ as a federation of languages
@@ -1662,4 +1665,18 @@ Placement new with address:
 * `static void* operator new(size_t size, void* ptr)`
 * Allow you to construct an object on the given address instead of allocating new memory
 * Used in vectors
+
+### Item 53: Pay attention to compiler warnings
+
+This item encourages you to pay attention to compiler warnings.
+
+### Item 54: Familiarize yourself with the standard library, including TR1.
+
+This item briefly covers the useful standard libraries. However, the segment on TR1 is
+not very relevant as the majority of TR1 is already in the c++ standards.
+
+### Item 55: Familiarize yourself with boost
+
+Briefly covers the different features of boost but I think the best way for you to familiarise yourself
+with boost is to use it in a project.
 
