@@ -193,6 +193,143 @@ f1(someFunc); // param deduced as ptr-to-func void (*)(int, double);
 f2(someFunc); // param deduced to ref-to-func void (&)(int, double);
 ```
 
+### Item 2: Understand `auto` type deduction
+
+This item covers how `auto` type deduction works for the majority of the time and
+the corner cases where it will behave differently.
+
+#### Template type deduction and `auto`
+
+During type deduction for `auto`, `auto` acts like `T` in template type deduction. Similar to
+`T`, `auto` can be surrounded by qualifiers (ie `const`, `&` or `&&`). You can see
+`auto` type deduction as wrapping a variable in a function template.
+
+```cpp
+// auto
+const auto& rx = 27;
+// same as wrap in function template
+
+template<typename T>
+void func_for_rx(const T& rx) {
+
+}
+```
+
+For universal reference, auto uses `auto&&` syntax to represent that it could
+either be lvalue or rvalue reference depending on the provided expression.
+
+```cpp
+auto&& uref1 = x; // x is int and lvalue so uref1's type is int&
+auto&& uref2 = cx; // cx is const int and lvalue, so uref2's type is const int&
+auto&& uref3 = 27; // 27 is int and rvalue, so uref3's type is int&&
+```
+
+**Motivation**: The main reason for using `auto&&`, is when you want to preserve the
+`rvalue`ness of a variable. This allows you to move the resource of the variable or forward
+it to another function.
+
+#### Edge case (initializer list)
+
+The only difference between auto type deduction and template type deduction is
+when braces (`{}`) are used.
+
+**For `auto`**: braces are deduced as `std::initializer_list`. Where each element is of
+the same type
+
+```cpp
+auto x4 = { 27 }; // type is std::initializer_list<int>, value is {27}
+auto x5 = {1,2, 3.0} // error! cant deduce the type
+```
+
+**For template type deduction**: cannot deduce the type for expression surrounded by `{}`
+
+```cpp
+template<typename T>
+void f(T param);
+
+f({1,2,3}); // error!
+```
+
+Note: There is no reason why there is a difference in their behaviour but it is what it is.
+
+#### `auto` return type or lambda params
+
+If `auto` is used as return value of functions or parameters of lambda functions, **template type deduction**
+is used instead of `auto` type deduction. Thus, it would be compilation error to use `{}` in
+function return value or lambda argument.
+
+### Item 3: Understand `decltype`
+
+`decltype` will parrot back the type of a name (variable) or expression. It can be used to 
+specify the type of a variable.
+
+```cpp
+struct A { double x; };
+const A* a;
+ 
+decltype(a->x) y; 
+```
+
+**Use Cases**
+For function templates, `decltype` can be used to allow the return type depend on the parameters. 
+* Use `auto` at the start of the function to state that trailing return type is used
+* Use trailing return type `-> decltype(...)` to state that the return type depends on the argument.
+  * If return type is used at the start, the parameters would not be available
+
+```cpp
+template<typename Container, typename Index>
+auto authAndAccess(Container& c, Index i) -> decltype(c[i])
+{
+  authenticateUser();
+  return c[i];
+}
+```
+  * In c++14, the **trailing return** type will not be required as return type will be deduced with just `auto`
+
+*Caveats*:
+* For `auto` return type, type template deduction is used and the reference-ness will be ignored.
 
 
+#### `decltype(auto)`
 
+The combination of `decltype(auto)` means that type deduction is used (`auto`) but with `decltype` type rules (echo the exact type)
+
+```cpp
+Widge w;
+const Widget& cw = w;
+auto myWidget1 = cw; // auto type deduction: myWidget1 type is Widget
+decltype(auto) myWidget1 = cw; // auto type deduction: myWidget1 type is const Widget&
+```
+
+You can use `decltype(auto)` and `std::forward` to make sure that the return type of the function
+preserve the rvalue reference-ness and referenceness
+
+```cpp
+template<typename Container, typename Index>
+decltype(auto) authAndAccess(Container&& c, Inex i)
+{
+  authenticateUser();
+  return std::forward<Container>(c)[i];
+}
+```
+* This will allow the return type to be reference (with `decltype(auto)`)
+* Using universal reference (`&&`) allows both rvalue and lvalue containers to be provided
+* Use `std::forward` to perfectly forward the type of each element.
+
+**Caveats**:
+
+Wrapping a name with `()` will change the type from value to reference
+
+```cpp
+decltype(auto) f1() 
+{
+  int x = 0;
+  return x; // decltype(x) is int
+}
+
+decltype(auto) f2()
+{
+  int x = 0;
+  return (x); // decltype((x)) is int&
+}
+```
