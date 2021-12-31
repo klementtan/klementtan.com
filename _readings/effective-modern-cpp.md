@@ -10,7 +10,7 @@ Author: Scott Meyers
 ## General Review
 
 
-## Chapter 1
+## Chapter 1: Deducing Types
 
 ### Item 1: Understand template type deduction
 
@@ -333,3 +333,80 @@ decltype(auto) f2()
   return (x); // decltype((x)) is int&
 }
 ```
+
+#### Item 4: Know how to view deduced type
+
+* Using compiler:
+  * force a compilation error using the type you want to find
+* Runtime output
+  * Use `std::cout << typeid(x).name() << "\n"`. Only works if the type yields `std::type_info`
+  * This does not work as expected for all cases. `typeid` will return the type with the referenceness ignored
+* Boost `type_id_with_cvr` (best option)
+  * Will keep the constness and referenceness of it
+
+## Chapter 2: auto
+
+### Item 5: Prefer `auto` to explicit type declaration
+
+This item provides multiple reasons why using `auto` is preferred. (klement: personally I am convinced that 
+`auto` should be used in a c++ project)
+
+Pros
+1. Prevent uninitialized variables.
+  * With `auto`, variables will never be able to be declared without any initialization. This will prevent bugs
+  such as uninitialized integers or accidentally calling the default constructor on an object
+  ```cpp
+  int x; // UB
+  auto x = 5;
+
+  Foo f; // accidentally calling default constructor
+  auto f = Foo(x,y,z);
+  ```
+2. Prevent writing types that have long name (ie `typename std::iterator_traits<It>value_type`)
+3. Declare closures
+  * Previously, closures (captures surrounding scope) cannot be defined as it is known only to the compiler.
+4. lambda with `auto` instead of `std::function`
+  * Using `std::function` involves a template instantiation but `auto` does not
+  * `auto` will use the **minimum** memory
+  * `std::function` has a **fixed size** on the heap for any given function. If the size is not enough, it would
+  allocate memory on the heap instead. This could result in OOM.
+  * Due to **implementation details** that results in the that restricts `std::function` from being inlined, `auto`
+  closures will definitely be faster
+* The return type of a function might be different on different architecture.
+  * `std::vector::size()` returns 32 bit on 32-bit windows but 64 bit on 64-bit windows
+  * Using `auto` will prevent implicit conversion
+* Prevent accidental implicit conversion each entry of map is `pair<const key, val>` instead of `pair<key, val>`.
+  Doing `for (pair<std::string, int>& p : m)` will actually create a temporary object and return a reference to it.
+  
+### Item 6: Use the explicitly typed initializer idiom when `auto` deduces undesired types
+
+This item covers the case where simply replacing explicit type with `auto` will yield different behaviours.
+When we use `auto` for types that are **"invisible proxy"**, the type will no longer be invisible.
+
+**proxy type**: Are types that are meant to be intermediate type that represent 
+an underlying type. (ie `shared_ptr` or `unique_ptr`)
+
+**invisible proxy type**: Are proxy types that are meant to live in a single statement and be implicitly
+converted to the underlying type.
+
+`std::vector<bool>`: returns `std::vector<bool>::reference` instead of the traditional `bool&`.
+
+```cpp
+vector<bool> v(5, true);
+
+v[4] // returns std::vector<bool>::reference
+
+bool b1 = v[4] // returns std::vector<bool>::reference but implicityly converts to bool
+
+auto b2 = func_that_return_bool_vec()[4]; // UB! b2 is std::vector<bool>::reference which reference to a temporary object
+```
+* Using `auto` will prevent the **invisible proxy type** from converting to the desired **bool**
+* Why `vector<bool>` return object instead reference of the object: c++ treats `vector<bool>` differently so that the
+vector is represented as compactly as possible. 
+
+To solve this, we should use `static_cast` for **invisible proxy type**
+```cpp
+
+auto b2 = static_cast<bool>(func_that_return_bool_vec()[4]);
+```
+
