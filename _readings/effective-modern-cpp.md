@@ -410,3 +410,130 @@ To solve this, we should use `static_cast` for **invisible proxy type**
 auto b2 = static_cast<bool>(func_that_return_bool_vec()[4]);
 ```
 
+## Chapter 3: Moving to Modern C++
+
+### Item 7: Distinguish between `()` and `{}` when creating objects
+
+There are 4 ways to initialize an object:
+```cpp
+int x(0); // initializer is in parentheses
+int y = 0; // initializer follows "="
+int z{0}; // initializer is in braces
+```
+Note that using `=` on an uninitialized variable calls the copy constructor
+instead of the copy assignment constructor. (klement: I actually made
+this mistake during an interview...)
+
+```cpp
+Foo foo; //default constructor
+Foo bar = foo; // copy constructor instead of copy assignment
+```
+
+**() vs {}**
+C++11 introduced uniform initializer(`{}`) which aims to set a standard to initialization
+without using the braces syntax.
+
+Trade offs:
+* implicit conversion:
+  * `{}` does not allow implicit **narrowing** conversion (note that non-narrowing conversion is allowed)
+  while `()` allows narrowing conversion. Bugs due to narrowing conversion could be easily
+  avoided when we use `{}`
+* C++ most vexing parse
+  * *most vexing parse*: Anything that can be **parsed** as a declaration can be interpreted as one.
+  * This means that calling default constructor with parentheses will result in it declaring a
+  function instead of calling the default constructor (klement: this is an interesting behaviour that is
+  bug prone)
+  * This issue will not occur if you use braces initializer
+  ```cpp
+  Widget w2(); // declares a function w2 that returns Widget
+  Widget w3{}; // calls default constructor
+  ```
+* `std::initializer_list`
+  * braces initializer:
+    * If a class has overloaded constructor with one that takes `std::initializer_list`, it will always
+    prefer to use the constructor with `std::initializer_list`. 
+      * Can occur to any constructor (ie copy constructor, move constructor, ...) as long as there is a
+      non-narrowing conversion
+    * This will occur when there exist an implicit widening conversion for all elements in the braces
+    * Impact: suddenly adding a new `std::initializer_list` constructor would break all of the callers code
+    * **Caveat**: if the braces is empty, it would call the default constructor
+    instead of the `initializer_list` constructor with no elements. To call the initializer_list constructor
+    with no element, you will need to use `Widget w4({});`
+  * parentheses initializer: does not suffer from this issue at all
+    ```cpp
+    class Widge {
+      public:
+      Widget(int i, bool b);
+      Widget(int i, double d);
+      Widget(std::initializer_list<long double> il);
+    };
+    Widget w1(10, true)
+    ```
+
+### Item 8: Prefer `nullptr` to `0` and `NULL`
+
+The issue of using `0` and `NULL` to represent a null pointer is that `0` underlying type is an integer
+and `NULL` underlying type is an integral type (depending on compiler). This would result in
+* Overloaded function with one that accepts integral type and another that accepts a pointer, will always
+call the integral type function even though it might be meant to be a pointer
+  ```cpp
+  void f(int); 
+  void f(boo);
+  void f(void *);
+  f(0); // calls f(int)
+  f(NULL); // depending on compiler might call f(int) 
+  f(nullptr) // always call f(void *);
+  ```
+* Improved readability if `auto` is used
+* For template functions, `0` and `NULL` will always be deduced as int and integral type instead of `void *`
+
+### Item 9: Prefer alias declarations to typedefs
+
+```cpp
+typedef std::unique_ptr<std::unordered_map<std::string, std::string>> UPtrMapSS;
+using UPtrMapSS = std::unique_ptr<std::unordered_map<std::string, std::string>>;
+```
+
+We should use alias (`using`) instead of `typedef` because of the following reasons:
+* It is much readable for types that are function pointers
+  ```cpp
+  typedef void (*FP)(int, const std::string&);
+  using FP = void(*) (int , const std::string&);
+  ```
+* Template alias are allowed
+  ```cpp
+  // alias
+  template<typename T>
+  using MyAllocList = std::list<T, MyAlloc<T>>;
+
+  MyAllocList<Widget> lw;
+
+  // typedef
+  template<typename T>
+  struct MyAllocList {
+    typedef std::list<T, MyAllocT<T>> type
+  };
+  MyAllocList<Widget>::type lw;
+  ```
+* Template alias with template class
+  * With `typedef` in template class, you will need to use `typename` as
+  the templated `typedef` could have full specialisation. This means that
+  it could declare `type` as something else (might not be a type). This will result
+  in the `typedef` template in template class being a dependent type.
+  * For alias template, it will definitely be a type so there is no dependencies
+  ```cpp
+  template<typename T>
+  class Widget {
+  private:
+    typename MyAllocList<T>::type list;
+  }
+
+  template<typename T>
+  using MyAllocList = std::list<T, MyAlloc<T>>;
+
+  template<typename T>
+  class Widget {
+  private:
+    MyAllocList<T> list;
+  }
+  ```
