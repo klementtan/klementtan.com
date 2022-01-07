@@ -770,3 +770,109 @@ Generated functions
 Conditions for generated functions
 * Copy operations are **independent**: declaring one does not prevent compilers from generating the other
 * Move operations are **not independent**: declaring one prevents compilers from generating the other
+
+### Item 18: Use `std::unique_ptr` for exclusive ownership resource management
+
+Exclusive ownership:
+* Use to represent exclusive ownership
+* OnDly supports move semantics (do not allow copy)
+* functions can return `std::unique_ptr`. Return in function to represent the ownership transfer from
+callee to caller
+
+Extra functionallity
+* Most of the time `std::unique_ptr` have the same size as raw pointers
+* Support custom deleter
+  * Accepts the raw pointer as arguments.
+  * Need to manually call the delete.
+  * If the deleter captures the surrounding scope, the size will not be the same
+  ```cpp
+  auto delInvmt = [](Investment* pInv) {
+    makeLogEntry(pInv);
+    delete pInv;
+  }
+  std::unique_ptr<Investment, decltype(delInvmt)>pInv(nullptr, decltype)
+  ```
+* Use `::reset(T*)` to reset the underlying pointer the unique pointer points to
+* Can easily change to `std::shared_ptr`
+* Allow single object and array to be wrapped
+  * `unique_ptr<T>`
+    * call `delete`
+    * allow `->` syntax
+    * do not allow `[]` syntax
+  * `unique_ptr<T[]>`
+    * call `delete[]`
+    * allow `[]` syntax
+    * do not allow `->` syntax
+
+### Item 19: Use `std::shared_ptr` for shared ownership resource management
+
+Functionality:
+* Represent a shared ownership of a resource
+* When the last object stop pointing to the resource, it will destroy the resource
+* Supports custom deleter like `unique_ptr`
+  * Do not need to state the type custom deleter
+  ```cpp
+  auto deleter =[](){ ... }
+  std::shared_ptr<Widget> pw(new Widget, deleter)
+  ```
+  * Custom deleter does not change the size of `shared_ptr`
+* Unlike `unique_ptr`, shared pointer does not support `T[]`
+
+Under the hood:
+* Reference counting:
+  * Most constructors(non-move) will increment the reference count
+  * Move constructors will not change the reference count.
+    * Move the reference count from one to another
+    * Faster than non-move (dont need atomic operations)
+  * copy assignment will increment the rhs reference count and decrement the lhs reference count
+  * when the reference count becomes 0, it will destroy the underlying resource
+* Performance limitations
+  * **twice the size** of normal raw pointers
+  * reference count are dynamically allocated (additional overhead)
+  * increment and decrement are atomic
+
+#### `std::shared_ptr` control block
+
+* Each `shared_ptr` should have a control block that stores metadata for it
+* metadata
+  * reference count
+  * weak count
+  * custom deleter
+  * allocator
+* A **new control block** created when:
+  * `std::make_shared` is used
+  * when `std::unique_ptr` or `std::auto_ptr` is used to construct `shared_ptr`
+  * when **raw pointer** pass as argument to the `shared_ptr` constructor
+* **Limitation**: Each raw pointer address should only have a unique control block.
+  * Virtual function is involved which would lead to more latency
+
+**UB**: multiple control block for a shared pointer
+
+When a single address is used in different `shared_ptr` with different control block, there will be different reference
+count of different value and delete will be called twice on the same address
+
+```cpp
+auto pw = new Widget;
+std::shared_ptr<Widget> spw1(pw, logginDel);
+std::shared_ptr<Widget> spw2(pw, logginDel);
+```
+
+Usually happen when using `this`. The member function do not know if the current instance is already in a shared pointer
+
+```cpp
+class Widget {
+private:
+  std::vector<std::shared_ptr<Widget>> processWidget;
+public:
+  void process() {
+    processWidget.emplace_back(this);
+  }
+}
+```
+
+Mitigation: `std::enable_share_from_this<T>`
+* virtual function `this->shared_from_this()` that will make sure that there
+will only be one control block for `this`
+* make all constructors private and have a factory function that
+returns a `shared_ptr` from `shared_from_this()`. This will make sure that external callers
+will not have access to `this`
