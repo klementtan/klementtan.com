@@ -537,3 +537,236 @@ We should use alias (`using`) instead of `typedef` because of the following reas
     MyAllocList<T> list;
   }
   ```
+
+### Item 10: Prefer scoped enums to unscoped enums
+
+Unscoped enums:
+
+```cpp
+enum Color {
+  black,
+  white,
+  red
+};
+```
+
+Scoped enums:
+```cpp
+enum class Color {
+  black,
+  white,
+  red
+};
+```
+Enumerators: are the entities within each enum. Each enumerator can be assigned a range of values.
+
+Unscoped enums disadvantages:
+* Implicit conversion
+  * unscoped enums can be implicitly converted to integral types and then to floating point types.
+  This will result in code that does not make sense (treating enums as floats)
+* Namespace pollution:
+  * For unscoped enums, the enumerator (inside the enum) share the same namespace as the enumerator.
+  * This does not occur for scoped enums
+  ```cpp
+  enum Color {
+    black,
+    white,
+    red
+  };
+  auto white = false; // error! white already declared
+  ```
+* Forward declaration
+  * For unscoped enums, the underlying integral type is determined by the compiler after viewing all of
+  the range of values for each enumerator. This means that the compiler will not be able to know how to
+  use the enum if it does not know the enumerator. Thus it cannot be forward declared.
+  * For scoped enums, the underlying integral type is `int` so the enum can be forward declared
+  * Advantage of forward declare: prevent the entire project from recompiling if a new enumerator is added.
+  * This can be avoided if you set the default integral type for unscoped enums
+    ```cpp
+    enum Color : std::uint8_t;
+    ```
+
+Advantage of unscoped enums:
+* use unscoped enums for getters of tuple 
+  ```cpp
+  enum UserInfoField = { uiName, uiEmail, uiReputation };
+  std::tuple<std::string, std::string, std::size_t> uInfo;
+  ...
+  auto val = std::get<uiEmail>(uInfo);
+  ```
+
+### Item 11: Prefer deleted functions to private undefined
+
+When you want to remove a function that is automatically generated (ie: copy constructor,
+implicit conversion, ...)
+
+c++98: If the function is a member function, declare it private and do not define the function.
+Only limited to member functions
+
+c++11: 
+* use `delete` keyword
+  ```cpp
+  class Foo {
+  public:
+    Foo(const Foo&) = delete
+  }
+  ```
+* `delete` functions should be *public* instead of *private*. In some compiler, the error message
+would be *private* function not accessible instead of function deleted
+
+Benefits of `delete` over private + undefined
+* c++98 method of private + undefined will only be caught in link time while
+c++11 method of `delete` will be caught in compile time
+* Use overloaded `delete` to prevent implicit conversion. (side note: c++ always prefer to convert float to double instead of int)
+  ```cpp
+  bool isLucky(int num); // allow the arguments to be int, char, float
+
+  bool isLucky(char) = delete; 
+  bool isLucky(bool) = delete;
+  bool isLucky(double) = delete; 
+
+  // Lead to compilation error
+  isLucky('a');
+  isLucky(true);
+  isLucky(3.5f);
+  ```
+* Prevent use of template specialisation for certain template arguments.
+  * Using full specialisation to state that the function is deleted
+  ```cpp
+  template<typename T>
+  void processPointer(T* ptr);
+
+  template<>
+  void processPointer<void>(void*) = delete;
+
+  template<>
+  void processPointer<char>(char*) = delete
+  ```
+  * If the function template is member function, declare the deleted function in namespace scope(outside of the class)
+
+### Item 12: Declare overriding functions `override`
+
+Conditions for derive class overriding base class:
+* Base class function must be virtual
+* Base and derived function names must be identical
+* Parameter type must be identical (no implicit conversion allowed)
+* The constness of the base and derived function must be the same
+* The return types and exception specification of the base and derived must be compatible
+* The reference qualifiers must be identical
+  * Member functions can have trailing `&` or `&&` to overload the function on what type of
+  reference the object is.
+  ```cpp
+  class Widget {
+  public:
+    using DataType = std::vector<double>;
+    ...
+    DataType& data() & 
+    { return values; }
+    DataType&& data() &&
+    { 
+      // move data instead of copying when it is a rvalue (temp obj)
+      return std::move(values); 
+    }
+  private:
+    DataType values;
+  } 
+  ```
+
+In c++11, we can declare overriden functions `override`.
+```cpp
+class Base {
+public:
+  virutal void mf1() const;
+};
+class Derived : public Base {
+public:
+  virutal void mf1() const override;
+}
+```
+
+Benefits of `override` keyword:
+* Prevent accidentally not overriding base virtual function if any of the condition not met. Throws compilation error.
+* Compiler will show the impact when changing the signature of Base class function and recompiling it.
+
+### Item 13: Prefer `const_iterator` to `iterator`
+
+In C++11, to easily use `const_iterator` you can call the member functions `cbegin()` and `cend()` or
+`std::cbegin()` and `std::cend()` to get the `const_iterator`. Use the non-member
+`std::cbegin()` and `std::cend()` for generic code.
+
+### Item 14: Declare functions `noexcept` if they won't emit exceptions
+
+In c++11, functions can be declared `noexcept` to guarantee that no exceptions will be thrown.
+The **responsibility is on the developer** (not the compiler) to ensure that all the code
+in the body will not throw exception.
+
+Benefits of declaring `noexcept`:
+* The compiler will not keep the runtime stack in an unwindable state. No need for stack trace
+if there is no exception.
+* The compiler will not need to ensure that objects are destroyed in inverse 
+order of construction (only relevant when exception is thrown).
+* Standard library uses `std::move_if_noexcept`. If the move constructor is no except, some functions
+would move instead of calling copy constructor for optimisation. No except condition is to ensure
+that these functions still have strong safety guarantee.
+  * Usually important for the member functions `swap` and `move` constructor
+
+Note: do not false move `noexcept`. It could come at a cost of good code quality.
+
+### Item 15: Use constexpr whenever possible
+
+(klement: I find this item very useful as `constexpr` is a very new concept to me and scott explains it
+very well here)
+
+#### `constexpr` objects
+
+Are objects that are `const` and known during compile time (technically translation time: compile time + link time)
+* Expressions involving `constexpr` variables can be `constexpr`
+* Return values of `constexpr` functions can be `constexpr`
+
+#### `constexpr` functions
+
+* If the arguments provided are `constexpr` objects, the function will be evaluated at compile time and the return value will be constexpr
+* else the function would be evaluated like any normal functions
+* Arguments can only be literal types
+  * Types that can be determined during compilation
+  * Objects that have `constexpr` constructors
+* function body requirements
+  * C++11: 
+    * constexpr member functions must be treated as const member function. Cannot change data members.
+    * must be single line. However, `?:` is permitted.
+  * C++14: no restrictions to function body
+
+**`constexpr` benefits**
+* The objects may be placed in read-only memory
+* Evaluated at compile time means that it will have shorter run time
+* Can be used as template arguments (ie `std::array` size)
+
+### Item 16: Make `const` member functions thread safe
+
+To a caller, `const` member functions should be thread safe as it only involves reading of data. However,
+sometimes you would wish to add a layer of caching for `const` member functions. You can do so by setting 
+`mutable` (can be modified by `const` member functions) data members. Thus, it is important to make sure
+that it is thread safe.
+
+How to add cache:
+* `atomic`: use std's `atomic` variables. Should only use if there is only 1
+mutable data member.
+* `std::mutex`: normal lock and unlock pattern
+
+### Item 17: Understand special member functions
+
+Generated functions
+* default constructor
+* copy operations
+  * copy constructor
+  * copy assignment
+* move operation
+  * move constructor
+  * move assignment
+  * perform memberwise move on the current object and base class part
+  * non-move enabled data members will be copied instead
+* destructor
+
+Conditions for generated functions
+* Copy operations are **independent**: declaring one does not prevent compilers from generating the other
+* Move operations are **not independent**: declaring one prevents compilers from generating the other
