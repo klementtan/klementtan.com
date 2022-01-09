@@ -757,19 +757,24 @@ mutable data member.
 
 Generated functions
 * default constructor
+  * Generated if the class does not have user declared function
 * copy operations
   * copy constructor
+    * Deleted if the class declares a move operation
   * copy assignment
+    * Deleted if the class declares a move operation
 * move operation
   * move constructor
   * move assignment
   * perform memberwise move on the current object and base class part
   * non-move enabled data members will be copied instead
+  * Generated only if the class does not define any of the copy operation or move operation or destructor
 * destructor
 
 Conditions for generated functions
 * Copy operations are **independent**: declaring one does not prevent compilers from generating the other
 * Move operations are **not independent**: declaring one prevents compilers from generating the other
+
 
 ### Item 18: Use `std::unique_ptr` for exclusive ownership resource management
 
@@ -876,3 +881,296 @@ will only be one control block for `this`
 * make all constructors private and have a factory function that
 returns a `shared_ptr` from `shared_from_this()`. This will make sure that external callers
 will not have access to `this`
+
+### Item 20: Use `std::weak_ptr` for `std::shared_ptr` like pointers that can dangle
+
+Motivation: smart pointers that acts like shared pointer but does not take part
+in shared ownership
+
+`std::weak_ptr` properties:
+
+* Allowed to dangle: the object on the heap could be destoryed
+* Can only be created from `std::shared_ptr`
+  ```cpp
+  std::shared_ptr<Foo> sptr = make_shared();
+  std::weak_ptr<Foo>wptr(sptr);
+  ```
+  * Will not increase the reference count of `shared_ptr`
+* Can check if the underlying object on the heap has been destoryed (not possible with other smart pointers)
+  * call `std::weak_ptr::expired`
+* Converted back to `shared_ptr`: regain the shared owner ship of the underlying object
+  * `std::weak_ptr::lock`: returns the corresponding `shared_ptr<Foo>` if object still on heap or `nullptr`
+  if the object has been deleted.
+  * `std::shared_ptr<T>(std::weak_ptr<T>)`: use the weak pointer as an argument for
+  shared pointer. Throws an exception if the underlying object that the weak pointer points
+  to has been deleted.
+
+Uses cases:
+* Caching objects on the heap:
+  * Stores a containers of weak pointers to the object. Retrieve from cache by converting the weak pointer
+  back to shared pointer
+* Prevent cyclic reference:
+  * Shared pointers will not be able to solve dangling cyclic reference.
+  * If the leaves need a reference back to the parent, use weak pointers to prevent cyclic reference 
+    * If the child life time will always be shorter than the parent, it is okay for the child to have
+    a raw pointer back to the parent. When a child is a live the raw pointer to parent will always be alive
+* Observer design pattern:
+  * Observer subscribe to subjects by storing a pointer to the observer as a data member in the subject.
+  Subject will call the member of functions to notify them
+  * Subjects to store a weak pointer to observer:
+    * Do not do anything if the weak pointer has expired
+    * Convert to shared pointer and notify if the observer is not destroyed
+    * Prevent the subject from affecting the life time of the observer
+
+Efficiency: Exactly same as shared pointer
+
+### Item 21: Prefer `std::make_shared` and `std::make_unique` to direct use of new
+
+Resource leak from constructor and `new`
+* When:
+  1. A function is called with `{unique/shared}_ptr(new T)` and `expcetionFunction()` as argument
+  2. Compilers are allowed to reorder the argument instruction if there are no dependencies
+  3. Instructions could be reorder to: `new T` -> `exceptionFunction` -> smart pointer exception
+  4. This will result in resource leak as `new T` is stored in smart pointer and will not be deleted
+* Wrapping the allocating of the resource + constructor of the smart pointer in a function, will prevent
+bad interleaving of instructions.
+
+
+`make_shared` is faster:
+* shared pointer will need to allocate memory for both the object and control block
+* Using `make_shared` will allocate both the object and control block together
+* One allocation is required instead of allocating the object first then the control block
+  * Faster and smaller code
+  * Control block and object in a contiguous memory location -> spatial locality
+
+`make_*` limitations:
+* Cannot specify custom deleter
+* Will not be able to perfectly forward braced initializer
+  ```cpp
+  auto upv = make_unique<vector<int>>(10, 20); 
+  // calls vector<int>(10,20) instead of vector<int>{10,20}
+  ```
+* Custom newed object do not work well `make_shared`
+* As control block and the object are in the same chunk of memory, the chunk of memory can
+only be freed when the reference count (number of shared pointer) and weak count (number of 
+weak pointer) goes to 0.
+  * The chunk memory can still be around when the object has been destructed (as long as the number of dangling weak pointers).
+  * Using `new T` on shared pointer constructor will have two different chunk of memory
+  and the object's chunk memory can be immediately freed when no more shared pointers points to the
+  object
+  * (klement: I was not aware that the freeing of memory might not occur immediately after the destructor is called)
+
+
+Mitigation for `new T` and shared pointer constructor
+* Construct the shared pointer and `new T` in an independent line -> prevent resource leak
+* pass the shared pointer using `move` to preserve rvalueness
+
+### Item 22: When using the Pimpl Idiom, define special member function in the implementation file (.cpp file)
+
+(klement: This items goes in-depth on how to properly utilize the pimpl idiom. This is very crucial as there
+are not many resources out there (including effective cpp) that properly show and explain how to do so.)
+
+Motivation: As a library author, if a client include your library header files, they will also include the headers that
+your header files include. This will result in them having to recompile all of their code if the indirect headers file change.
+
+Proper pimpl example:
+
+```cpp
+// In header (.h) file
+class Widget {
+private:
+  struct Impl;
+  std::unique_ptr<Impl> pImpl;
+public:
+  Widget();
+  ~Widget();
+
+  Widget(const Widget& rhs);
+  Widget& operator=(const Widget& rhs);
+
+  Widget(Widget&& rhs);
+  Widget& operator=(Widget&& rhs);
+};
+
+// In implementation (.cpp) file
+#include "widget.h"
+#include "gadget.h"
+#include <string>
+#include <vector>
+
+struct Widget::Impl {
+  std::string name;
+  std::vector<double> data;
+  Gadget g1, g2, g3;
+}
+
+Widget::Widget() : pImpl(std::make_unique<Impl>()) {}
+Widget::~Widget() = default; // force compiler to generate destructor after seeing Widget::Impl
+
+Widget(Widget&& rhs) = default; // moving of underlying impl is desired behaviour
+Widget& operator=(Widget&& rhs) = default; // ditto
+
+// perform deep copy of the underlying impl
+// do so by using the impl copy operations
+Widget(const Widget& rhs) : pImpl(std::make_unique<Impl>(*rhs.impl)) {}
+Widget& Widget::operator=(const Widget& rhs)
+{
+  *pImpl = *rhs.impl;
+  return *this;
+}
+```
+
+Impl:
+* Declare Impl in header file but do not define it so that you do not need to 
+need to include the dependencies for the definitions
+* Any compiler generated functions (destructor, move, copy) that require the 
+underlying implementation should also be declared but not defined 
+(incomplete type) in the header. This will make sure that when the compiler 
+see these function it would have already seen the implementation type.
+  * Under the hood, destructor is the only operation that does not work without declaration.
+  Without destructor, all other generated function would not be generated
+
+`unique_ptr`: the underlying data has to be allocated on the heap. Use `unique_ptr`
+to easily manage the pointer
+
+Destructor and move operations:
+* The generated function behaviour for these function are desired but we have to declare them in the header
+and define them as `=default` in implementation.
+* By default compiler will inline these functions and generate the functions at the header file. By declaring them,
+the compiler will go to the implementation file to find the definition and default to default after seeing `= default`
+
+Copy operations:
+* Copy operations should be deep copy instead of shallow copy (copying the pointer but still point to the same address)
+* Instead of manually copying the data member outisde of `impl`, call the underlying impl copy operations.
+
+Using `shared_ptr` instead of `unique_ptr`
+* Destructor for `shared_ptr` are not part of the `shared_ptr` type (stored at runtime control block)
+
+## Chapter 5: Rvalue Reference, Move Semantics and Perfect Forwarding
+
+### Item 23: Understand `std::move` and `std::forward`
+
+Both `std::move` and `std::forward` do not perform any "moving" and do not have any executable code at runtime.
+
+#### `std::move`
+
+Performs *unconditional* cast to rvalue reference
+
+```cpp
+template<typename T>
+decltype(auto) move(T&& param)
+{
+  using ReturnType = remove_reference_t<T>&&;
+  return static_cast<ReturnType>(param)
+}
+```
+* `T&&` in function template means that it can be of any reference
+* move remove all reference and cast it back to the rvalue (unconditional cast)
+
+`std::move` on a `const` variable as overloaded function argument. Call the function in the following order
+1. Calls the param with `const T&&`
+2. Calls `const T&`: const lvalue reference binds to const rvalue reference 
+  * const rvalue reference will never bind to non-const rvalue reference
+  * Converse is ok -> binding non-const rvalue reference to const rvalue reference
+* Should only move non-const variable otherwise will *usually* bind to const lvalue reference
+* `std::move` does not guarantee moving.
+
+#### `std::forward`
+
+Problem: All function parameters are lvalue as they exist as a variable in the parameters (eventhough might be temporary on call-site).
+Any function call within a function body with the parameters will be **rvalue**.
+
+Solution: `std::forward` will cast the function template param to **rvalue** if it is **rvalue** on the call-site
+* The rvalue-ness is encoded in the function template param `T`
+* `std::forward` will conditionally cast to `rvalue` if the argument is `rvalue`.
+
+### Item 24: Distinguish universal references (forwarding reference) from rvalue references
+
+Universal reference: references that can be rvalue or lvalue, const or non-const, volatile or non-volatile
+
+Conditions for universal reference: **type deduction must** occurs specific to the function (ie function template or `auto`)
+
+**Function template**:
+```cpp
+template<typename T>
+void f(T&& param)
+```
+* When the template is specific to the function. Type is deduced every time the function is called.
+  * Function inside template class do not perform type deduction every time it is called 
+  ```cpp
+  template<class T, class Allocator = allocator<T>>
+  class vector {
+  public:
+    void push_back(T&& x);
+  }
+
+  class vector<Widget> {
+  public:
+    void push_back(Widget&& x); // no type deduction
+  }
+  ```
+* Must be of the form `T&&`. No qualifiers are allowed (ie `const T&&`)
+
+`auto&&`
+```cpp
+auto&& var2 = var1;
+
+auto fn = [](auto&& func, auto&&... params) {
+  ...
+}
+```
+* Using `auto&&` in statement will set the type to whatever the expression is.
+* Using `auto&&` in a lambda param uses type deduction and will deduce the type it is.
+
+**Side Note**: universal reference + string literal
+* Passing string literal (`"..."`) to a function taking universal reference will be deduced to
+array of characters `const char[N]`. This will allow the param to point to the string in
+wherever the literal is stored (usually read only memory) instead of creating a temporary string.
+* Using `std::forward` on the deduced `const char[N]` will allow the string to only be created at
+where it is really needed
+
+
+### Item 25: Use `std::move` on rvalue references, `std::forward` on universal references
+
+* If the parameter is an rvalue, it can and should be moved. Propagate the rvalueness using
+`std::move` for rvalue and `std::forward` for universal reference.
+* function returning ref params by value
+  * Should propagate rvalueness in the return because there would be no RVO (see below)
+  * If the param is rvalue it would call the move constructor for the temp variable instead
+  of having to copy the temp object into the return value
+  ```cpp
+  Matrix operator+(Matrix&& lhs, const Matrix& rhs) {
+    lhs += rhs;
+    return std::move(lhs);
+  }
+  template<typename T>
+  Fraction reduceAndCopy(T&& frac) {
+    frac.reduce();
+    return std::forward<T>(frac);
+  }
+  ```
+  * If the object does not have move constructor, `return std::move(lhs)` will default to calling
+  copy constructor (non-intrusive)
+
+#### Return Value Optimisation (RVO)
+
+*RVO*: compilers are allowed by constructing the return value in memory allocated (call-site)
+for the function's return value. This will prevent the need to **copy** or **move** constructor.
+
+Conditions:
+* The local object is the same as returned by the function
+* The local object is what's being returned
+  * Value parameters are considered local variable and returning them can be RVO'ed
+  * DO NOT `return std::move` as it will return a reference to local object and not satisfy
+  the condition. The copy will not be elided and will call the move constructor instead.
+
+**Note**: If the compiler does not perform RVO, it will call `return std::move` so that the
+return value will be moved constructed.
+
+### Item 26: Avoid overloading on universal references
+
+If a function is overloaded with universal reference and an explicit type,
+the universal reference function would be called most of the time.
+* Universal reference are greedy: can bind to any type and any qualifier
+  * Unless the argument function matches the other function completely (type + qualifier)
+* Compilers will still generate the copy move constructor even if a perfectly forwarding constructor is declared
