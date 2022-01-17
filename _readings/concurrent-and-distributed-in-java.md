@@ -115,6 +115,8 @@ Combine the idea of double flag (to state intent to enter CS) and explicit turn.
 * Exit spin lock if the opposite does not want CS or it is not the opposite party turn
 * Exit CS by stating that it no longer wants CS
 
+Disadvantage: Only works with two processors
+
 ```java
 class PetersonAlgorithm implements Lock {
   boolean wantCS[] = {false, false};
@@ -170,3 +172,132 @@ Case 2: When only $$P_0$$ or $$P_1$$ are in spinlock, the opposite `wantCS[i] = 
 ##### No starvation proof
 * Will unstarve the other process by setting `wantCS` to false
 * If re-try CS after returning will set the `turn` to the opposite party
+
+#### Lamport's Bakery
+
+Aims to overcome the disadvantage of Peterson's Algorithm of only being able to work with
+two processors
+
+*Intuition*:
+1. Doorway Step: Each process that requests critical section will receive a number
+  * The number will be later the request, the higher the number
+2. All process will check that all other process has completed the doorway step
+3. The process with the smallest number will be allowed into the critical section
+
+```java
+class Bakery implements Lock {
+  int N;
+  boolean[] choosing;
+  int[] number;
+
+  public Bakery(int numProc) {
+    N = numProc;
+    choosing = new boolean[N];
+    number = new int[N];
+    for (int j = 0; j < N; j++) {
+      choosing[j] = false;
+      number[j] = 0;
+    }
+  }
+
+  public void requestCS(int i) {
+    // step 1 doorway
+    choosing[i] = true;
+    for (int j = 0; j < N; j++) {
+      if (number[j] > number[i]) {
+        number[i] = number[j];
+      }
+      number[i]++;
+      choosing[i] = false;
+    }
+
+    for (int j = 0; j < N; j++) {
+      while( choosing[j] );
+      while ((number[j] != 0) &&
+              ((number[j] < number[i]) ||
+                ((number[j] == number[i]) && j < i));
+    }
+  }
+  public void releaseCS(int i)  {
+    number[i] = 0
+  }
+}
+```
+
+##### Mutual Exclusion Proof
+
+**Text book proof** (klement: IMO this proof is much cleaner as compared to the one in the lecture notes)
+
+*Assertion 1*: If $$P_i$$ is in critical section and some other process $$P_k$$ has
+already chosen its number, then $$(number[i], i) < (number[k], k)$$
+
+* If $$P_i$$ is in critical section, then it has exited the kth iteration(`int j = k`) 
+of busy waiting. It implies that:
+  * `number[k] = 0`:
+    * *Case 1*: $$P_k$$ has not entered the doorway $$\Rightarrow$$ will read the latest value
+    of `number[i]` $$\Rightarrow$$ `number[i] < number[j]`
+    * *Case 2*: $$P_k$$ has entered the doorway $$\Rightarrow$$ $$P_k$$ enter after $$P_i$$ checks `while(choosing[k])`
+    $$\Rightarrow$$ $$P_i$$ has already set `number[i]` $$\Rightarrow$$ $$P_k$$ will set `number[k] > number[i]`
+  * `(number[i], i) < (number[j], j)`: satisfy assertion
+
+*Assertion 2*: If $$P_i$$ is in critical section, then (`number[i] > 0`)
+
+* From the code the `number[i]` is at least `0` initially and will be incremented by `1`
+
+*Mutual exclusion proof*:
+* If $$P_i$$ and $$P_k$$ are in critical section then their `number[i/j] > 0` (**assertion 2**)
+* From **assertion 1**, only either `(number[i], i) < (number[k], k)` or `(number[k], k) < (number[i], i)` can satisfy
+but for both to be in the critical section both must be true which is a contradiction
+
+(TODO: add lecture notes proof)
+
+##### Progress Proof
+
+* Let $$P_i$$ be the process with the smallest number
+* All other process $$P_j$$ will eventually set `choosing[j] = false`
+  * $$P_i$$ breaks spinlock 1
+* $$P_i$$ will break spinlock 2 as it has the smallest number
+* **therefore** there will always be progress
+
+##### Starvation Proof
+
+* Let $$P_i$$ be the process that is starved
+* Any new request from $$P_j$$ will have number more than $$P_i$$
+* Eventually, all process will have higher number than $$P_i$$
+* $$P_i$$ will be have the smallest number $$\Rightarrow$$ $$P_i$$ will enter CS (contradiction)
+
+### Hardware Solution
+
+#### Disabling interrupts
+
+Disable interrupts when entering CS and enable interrupts when leaving CS
+
+Disable all interrupts $$\Rightarrow$$ **disable context switching** $$\Rightarrow$$ no interleaving of instructions
+$$\Rightarrow$$ no race condition
+
+Disadvantage:
+* not feasible if threads are mapped across different CPU
+* Interrupts are required for some operations
+
+#### Instruction with higher atomicity
+
+`TestAndSet`
+
+```java
+// whole function excuted automatically
+boolean TestAndSet(Boolean openDoor, boolean newValue) {
+  boolean tmp = openDoor.getValue();
+  openDoor.setValue(newValue);
+  return tmp;
+}
+
+shared Boolean variable openDoor initialized to true;
+RequestCS(progress_id) {
+  while (TestAndSet(openDoor, false) == false);
+}
+
+ReleaseCS(process_id) {openDoor.setValue(true);}
+```
+
+* Only the first process will get `TestAndSet(openDoor, true) == true` and break the spinlock
+* All other process will get the value set by that process and stuck in spin lock
