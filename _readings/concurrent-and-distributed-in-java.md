@@ -301,3 +301,90 @@ ReleaseCS(process_id) {openDoor.setValue(true);}
 
 * Only the first process will get `TestAndSet(openDoor, true) == true` and break the spinlock
 * All other process will get the value set by that process and stuck in spin lock
+
+### Chapter 2 homework
+
+* **2.1**: Show that any of the follow modification to Peterson's algorithm makes it incorrect
+  * **2.1.a**: A process in Peterson's algorithm sets the turn variable to itself instead of setting it to the other process
+    * klement: This could lead to starvation as a process could be stuck in the spinlock forever. If $$P_0$$ is stuck in the spin lock and
+    $$P_1$$ leaves the CS and immediately request the critical section. $$P_1$$ could set `wantCS[1] = true` immediately after setting `wantCS[1] = true` when exiting the CS and since the
+    processes self-assign the turn, `turn` remains at `1`. This will result in $$P_0$$ getting starved
+    * answer: 
+      1. $$P_0$$: `wantCS[0] = true`
+      2. $$P_0$$: `turn = 0`
+      3. $$P_0$$: `wantCS[1] && (turn == 1)`
+        * enter CS as `wantCS[1] = false`
+      4. $$P_1$$: `wantCS[1] = true`
+      5. $$P_1$$: `turn = 1`
+      6. $$P_1$$: `wantCS[0] && (turn == 0)`
+        * enter CS as `turn = 1`
+  * **2.1.b** A process sets the turn variable before setting the `wantCS` variable
+    * klement: idk
+    * answer:
+      1. $$P_1$$: `turn = 1`
+      2. $$P_0$$: `turn = 0`
+      3. $$P_0$$: `wantCS[0] = true`
+      4. $$P_0$$: `while(wantCS[1] == true && turn == 1)`
+        * $$P_0$$ enters CS as `wantCS[1] = false`
+      5. $$P_1$$: `wantCS[1] = true`
+      6. $$P_1$$: `while(wantCS[0] == true && turn == 0)`
+        * $$P_1$$ enters CS as `turn = 1`
+* **2.2**: Show that Peterson's algorithm also guarantee freedom from starvation
+  * klement:
+    * Assume that $$P_0$$ has been starved. This means $$P_0$$ is stuck on the spinlock for all iteration and $$P_1$$ gains the CS for all iteration 0 to N
+    * If $$P_1$$ gains CS for iteration `i` and `i+1`. This means that `turn = 1` at iteration `i` and `i + 1`.
+    * However, $$P_0$$ is stuck at spinlock while $$P_1$$ sets `turn = 0` before checking the spin lock at `i + 1`
+    * Therefore, at the `i + 1` iteration the value of `turn = 0` and contradicts that `turn = 1` at iteration `i` and `i+1`
+* **2.3**: Show that the bakery algorithm does not work in absence of `choosing` variable
+  * klement: idk 
+  * Ansewr:
+    1. $$P_1$$: `number[1] = number[0]`
+    2. $$P_0$$: `number[0] = number[1]`
+      * Both `number[0] = number[1] = 0`
+    3. $$P_1$$: `number[1]++ `
+    4. $$P_1$$: `while(number[0] != 0 && Smaller(number[0], 0, number[1], 1))`
+      * Enter CS as `number[0] = 0`
+    5. $$P_0$$: `number[0]++`
+    6. $$P_0$$: `while(number[0] != 0 && Smaller(number[0], 0, number[1], 1))`
+      * Enter CS as `number[0] == number[1]` but pid of $$P_0$$ is smaller
+* **2.4**:
+  * Question does the Dekker alogrithm fullfill all properties
+    ```java
+    class Dekker implements Lock {
+      boolean wantCS[] = {false, false};
+      int turn = 1;
+      public void requestCS(int i) {
+        int j = 1 -1;
+        wantCS[1] = true;
+        while(wantCS[j]) {
+          if (turn == j) {
+            wantCS[i] = false;
+            while(turn == j);
+            wantCS[i] = true;
+          }
+        }
+      }
+      public void releaseCS(int i) {
+        turn = 1 - i;
+        wantCS[i] = false;
+      }
+    }
+    ```
+  * Answer: True for all 3 properties
+  * Mutual Exclusion Proof:
+    * Case 1: `turn = 0`
+      * $$P_1$$ must have seen `wantCS[0] = false` (if not it will stuck at `while(turn == 0)`)
+      * $$\Rightarrow P_1$$ see that `wantCS[0] = false` in `while(wantCS[0])`. 
+      * $$\Rightarrow$$ $$P_0$$ havent execute `wantCS[0] = true`
+      * $$\Rightarrow$$ when $$P_0$$ reach `while(wantCS[1])`, `wantCS[1] = true` and stuck in spinlock
+    * Case 2: symmetry
+  * Progress Proof:
+    * Case 1: `turn = 0`
+      * `P1`: `wantCS[1] = false` eventually (does not matter which part)
+      * `P0` will enter the critical section after `wantCS[1] = false`
+    * Case 2: `turn = 1`
+  * Starvation Proof: TODO understand this proof
+    
+    
+
+
