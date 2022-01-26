@@ -1403,3 +1403,34 @@ occurs for passing function template.
 in compile error
 * Resolve this by copying the value of bitfield. This is safe as all functions cannot accept bitfield
 as an argument so copying it would not result in invalid argument being forwarded
+
+### Chapter 6 Lambda Expressions
+
+Definitions
+* **Lambda expression**: a source code expression using the `[..](...){...}` syntax
+* **Closure**
+  * **Closure Class**: Each lambda expression will generate a Closure Class in *compile time*
+  * **Closure Object**: The instantiation of of a closure object
+    * There could be multiple closure object with the same closure class by invoking the copy ctor
+  * Example:
+    ```cpp
+    std::find_if(v.begin(), v.end(), [](int val){ return 0 < val && val < 10; })
+    ```
+    * The lambda expression will create a lambda class (compile time)
+    * The lambda class will instantiate a lambda object at runtime and pas it as the third argument
+
+#### Item 31: Avoid default capture modes
+
+C++ provides 2 types of default capture modes:
+* `[&]`: capture all local non-static variables or parameters. However it has the following disadvantages:
+  * The captured variables will only live for the duration of the function (stored on stack)
+  * However, the closure object can live beyond the stack (ie by copying it to heap with adding to vector)
+  * This will result in closure object having a dangling reference
+  * Using non default reference capture `[&var]` will also lead to dangling reference but developers will be
+  more aware of it.
+* `[=]`: capture by value of all local non-static variables. Disadvantages:
+  * False sense of security by making the lambda look self-contained
+  * If the lambda is instantiated in a member function, it will capture `this` (pointer to the current object)
+    * Will result in dangling pointer of `this` when object is destructed
+  * Does not copy data members: need to use `[m_data = m_data]` (generalized lambda) syntax to capture data members.
+  * **Capture static variables by reference**: even though it uses capture by value, local static variables are captured by reference. Could result in different behaviour when there static variables change.

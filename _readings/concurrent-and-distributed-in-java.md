@@ -384,7 +384,283 @@ ReleaseCS(process_id) {openDoor.setValue(true);}
       * `P0` will enter the critical section after `wantCS[1] = false`
     * Case 2: `turn = 1`
   * Starvation Proof: TODO understand this proof
-    
-    
+
+## Chapter 3: Synchronization Primitives
+
+The OS provides support for alternatives to busy waiting using spin lock
+
+### Semaphores
+
+* All statements within the semaphores are mutually exclusive (`synchronized` qualifier in method)
+* Binary semaphores: keep waiting until `value = true` when trying to gain lock. Set `value = true` when releasing the lock
+* Counting semaphores:
+  * `P()`: decrease the value by `1` and wait if `value < 0` (reached maximum number of allowed in CS)
+  * `V()`: increase the value by `1` and notify if `value <= 0` (replace another waiting process with it)
+
+#### Semaphore - Producer and Consumer
+
+Problem:
+* Producer and consumer share a single buffer of fixed size
+* Maintain a `inBuf` and `outBuf` (`outBuf` <= `inBuf` cyclically)
+* Requirement:
+  * Consumer should not fetch any time from an empty buffer
+  * Producer should not deposit any item in the buffer if it is full
+  * Considered conditional synchronization as the process need to synchronize on custom logic
+* Any reading to shared variable (`inBuf`, `outBuf`, `size`, `buffer`) must be done atomically
+
+```cpp
+class BoundedBuffer {
+  final int size = 10;
+  double[] buffer = new double[size];
+  int inBuf = 0, outBuf = 0;
+  BinarySemaphore mutex = new BinarySemaphore(true);
+  CountingSemaphore allowedProducer = new CountingSemaphore(size);
+  CountingSemaphore allowedConsumder = new CountingSemaphore(0);
+
+  public void deposit (double value) {
+    allowedProducer.P();
+    mutex.P();
+    buffer[inBuf] = value;
+    inBuf = (inBuf+1) % size;
+    mutex.V();
+    allowedConsumder.V();
+  }
+
+  public void fetch() {
+    double value;
+    allowedConsumder.P();
+    mutex.P();
+    value = buffer[outBuf];
+    outBuf = (outBuf + 1) % size;
+    mutex.V();
+    allowedProducer.V();
+  }
+}
+```
+* General Idea:
+  * Use semaphore to keep track the number of allowed deposit and fetch at any time
+    * Initially size * deposit and 0 * fetch operations allowed
+  * When a deposit action is used up, a corresponding fetch operation will be allowed. Consumer can consume the produced item
+  * The converse is true when a fetch operation is used up
+* deposit:
+  * Decrement the number of allowed deposit. Block if all the allowed deposit has been used up (semaphore < 0)
+  * Lock the mutex (gain access to shared variable)
+  * deposit the item
+  * Unlock the mutex (release the shared variable)
+  * Increment the number of allowed fetch
+* fetch: 
+  * Decrement the number of allowed fetch. Block if all the allowed fetch has been used up (semaphore < 0)
+  * Lock the mutex (gain access to shared variable)
+  * fetch the item
+  * unlock the mutex (relase the shared variable)
+  * Increment the number of allowed deposit
+
+#### Semaphore - Reader and Writer
+
+Problem:
+* No read-write conflict: reader and a writer do not access the database concurrently
+* No write-write conflict: two writer do not access the database concurrently
+
+With starvation
+```cpp
+class ReaderWriter {
+  int numReaders = 0;
+  BinarySemaphore mutex = new BinarySemaphore(true);
+  BinarySemaphore wlock = new BinarySemaphore(true);
+
+  public void startRead() {
+    mutex.P();
+    numReaders++;
+    if (numReaders == 1) wlock.P();
+    mutex.V();
+  }
+
+  public void endRead() {
+     mutex.P();
+     numReaders--;
+     if (numReaders == 0) wlock.V();
+     mutex.V();
+  }
+  public void startWrite() {
+    wlock.P();
+  }
+  public void endWrite() {
+    wlock.V();
+  }
+}
+```
+* startRead:
+  * Lock shared variable `numReaders`
+  * If the current reader is the first reader, try to get the write lock
+    * Other readers will not be able to enter this body as the shared variable is locked
+  * Once acquire the write lock, release the share variable lock to allow other readers
+* endRead:
+  * Lock shared variable `numReaders`
+  * If the current reader is the last reader release the write lock
+  * Once release the write lock, release the share variable lock to allow other readers
 
 
+TODO: Add starvation free Reader and Writer
+
+### Monitors
+
+Overview:
+* Monitor is a class that has data members and methods
+* Monitor Lock
+  * Have synchronized methods or synchronized code block then ensure mutual exclusion with all
+  other synchronized methods or code block.
+  * Only a single thread can execute code across all synchronized method or block at a time. 
+    * If thread 1 is in synchronized method 1 thread 2 cannot enter synchronized method 2
+  * If a thread acquires the monitor lock, it is "in the monitor"
+* Conditional lock
+  * Each monitor has a single conditional lock that starts off as **locked**
+  * When a thread enters the monitor and checks that a condition is not valid,
+  it can call `wait()` and get blocked until another threads changes the condition
+  and call `notify()` on it
+  * When a thread calls `wait()` and block, it will exit the monitor and be added into the
+  condition queue
+  * When another thread calls `notify()`, a thread in the condition queue will be blocked.
+    * What happens next depends on the type of monitor lock (Hoare monitor or Java monitor)
+
+
+#### Hoare Monitor
+
+1. `t1` calls `wait()` and get added to condition queue
+2. `t2` calls `notify()` and wakes up `t1`
+3. `t2` **immediately exits monitor** and enter the monitor lock queue (lose execution)
+4. `t1` **immediately enters the monitor** and gain access to monitor lock
+
+**Advantage**: There is no change in state when a thread (`t2`) calls `notify` when a condition
+is valid to when the corresponding thread (`t1`) unblocks from `wait`. This means that the condition
+that `t2` checks will be the same when `t1` unblocks
+
+#### Java Monitor
+
+1. `t1` call `wait()` and get added to condition queue
+2. `t2` calls `notify()` and wakes up `t1`
+3. `t1` gets pushed over to the **monitor lock queue**
+4. `t2` continues the execution in the monitor
+5. `t1` enters the monitor and continue from `wait()` when `t2` exits the monitor
+
+**Disadvantage**:
+* There could be a change in state when `t2` calls `notify()` and `t1` unblocks from `wait()`.
+* `t2` could change the state/condition after calling `notify()`
+* To resolve this:
+  ```cpp
+   while (!B) x.wait();
+  ```
+**Producer and Consumer**
+
+```java
+class BoundedBufferMonitor {
+  final int sizeBuf = 10;
+  double [] buffer = new double[sizeBuf];
+  int inBuf = 0, outBuf = 0, count = 0;
+
+  public synchronized void deposit (double value) {
+    while (count == sizeBuf)
+      wait();
+    buffer[inBuf] = value;
+    inBuf = (inBuf +1) % sizeBuf;
+    count++;
+    if (count == 1)
+      notify();
+  }
+
+  public synchronized double fetch() {
+    double value;
+    while (count == 0)
+      wait();
+    value = buffer[outBuf];
+    outBuf = (outBuf + 1) % sizeBuf;
+    if (count == sizeBuf - 1)
+      notify();
+    return value;
+  }
+}
+```
+* When any producer or consume start executing, it will always gain the monitor
+lock
+* Producer will block until there are space (`count < sizeBuf`) and consumer will wait until there are items (`count > 0`)
+* When either the producer or consumer finish execution, there will be change in
+state and it will call `notify` to wake up any threads that are blocked
+* Blocked thread will wake up and check the state mutually execlusively
+
+### Homework
+
+Lock free reader writer
+
+```javaj
+Vector queue;
+int numReader; int numWriter;
+
+// Writer entry
+Writer w = new Writer(myname);
+synchronized(queue) {
+  // need to be blocked
+  if (numReader > 0 || numWriter > 0) {
+    w.OkToGo = false;
+    queue.add(w);
+    // if do w.wait() here will result in nested monitor
+  } else {
+    w.okToGo = true;
+    numWriter++;
+  }
+}
+
+// w only blocked to itself
+synchronized (w) { if (!w.okToGo) w.wait(); }
+
+// code for writer to exit
+synchronized (queue) {
+  numWriter--;
+  if (queue is not empty) {
+    // rmeove a single write or a btach of readers from head of queue
+    for each wrier/reader removed do {
+      numWriter++ or numReader++;
+      synchronized(queue.front()) {
+        queue.front().okToGo = true;
+        request.notify();
+      }
+    }
+  }
+}
+
+// code for reader entry
+Reader r = new Reader(myname);
+synchronized (queue) {
+
+  if ((numWriter > 0) || )
+}
+```
+
+### Chapter 6 Lambda Expressions
+
+Definitions
+* **Lambda expression**: a source code expression using the `[..](...){...}` syntax
+* **Closure**
+  * **Closure Class**: Each lambda expression will generate a Closure Class in *compile time*
+  * **Closure Object**: The instantiation of of a closure object
+    * There could be multiple closure object with the same closure class by invoking the copy ctor
+  * Example:
+    ```cpp
+    std::find_if(v.begin(), v.end(), [](int val){ return 0 < val && val < 10; })
+    ```
+    * The lambda expression will create a lambda class (compile time)
+    * The lambda class will instantiate a lambda object at runtime and pas it as the third argument
+
+#### Item 31: Avoid default capture modes
+
+C++ provides 2 types of default capture modes:
+* `[&]`: capture all local non-static variables or parameters. However it has the following disadvantages:
+  * The captured variables will only live for the duration of the function (stored on stack)
+  * However, the closure object can live beyond the stack (ie by copying it to heap with adding to vector)
+  * This will result in closure object having a dangling reference
+  * Using non default reference capture `[&var]` will also lead to dangling reference but developers will be
+  more aware of it.
+* `[=]`: capture by value of all local non-static variables. Disadvantages:
+  * False sense of security by making the lambda look self-contained
+  * If the lambda is instantiated in a member function, it will capture `this` (pointer to the current object)
+    * Will result in dangling pointer of `this` when object is destructed
+  * Does not copy data members: need to use `[m_data = m_data]` (generalized lambda) syntax to capture data members.
+  * **Capture static variables by reference**: even though it uses capture by value, local static variables are captured by reference. Could result in different behaviour when there static variables change.
