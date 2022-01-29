@@ -1404,14 +1404,16 @@ in compile error
 * Resolve this by copying the value of bitfield. This is safe as all functions cannot accept bitfield
 as an argument so copying it would not result in invalid argument being forwarded
 
-### Chapter 6 Lambda Expressions
+## Chapter 6 Lambda Expressions
 
 Definitions
 * **Lambda expression**: a source code expression using the `[..](...){...}` syntax
 * **Closure**
-  * **Closure Class**: Each lambda expression will generate a Closure Class in *compile time*
+  * **Closure Class**: Each **lambda expression** will generate a Closure Class in *compile time*
+    * Equivalent to the class of the traditional functor
   * **Closure Object**: The instantiation of of a closure object
     * There could be multiple closure object with the same closure class by invoking the copy ctor
+    * Equivalent to a functor
   * Example:
     ```cpp
     std::find_if(v.begin(), v.end(), [](int val){ return 0 < val && val < 10; })
@@ -1419,7 +1421,7 @@ Definitions
     * The lambda expression will create a lambda class (compile time)
     * The lambda class will instantiate a lambda object at runtime and pas it as the third argument
 
-#### Item 31: Avoid default capture modes
+### Item 31: Avoid default capture modes
 
 C++ provides 2 types of default capture modes:
 * `[&]`: capture all local non-static variables or parameters. However it has the following disadvantages:
@@ -1434,3 +1436,196 @@ C++ provides 2 types of default capture modes:
     * Will result in dangling pointer of `this` when object is destructed
   * Does not copy data members: need to use `[m_data = m_data]` (generalized lambda) syntax to capture data members.
   * **Capture static variables by reference**: even though it uses capture by value, local static variables are captured by reference. Could result in different behaviour when there static variables change.
+
+### Item 32: Use init capture to move objects into closures
+
+**Active Recall**:
+* What is the lifetime of a lambda
+* How do you move objects from surrounding scope into a lambda
+  * In c++11?
+  * In c++14?
+* How are init capture variables stored
+
+#### Init Capture (C++14)
+
+* In C++14 you can use *init capture* that allows you to declare the data members of the closure class.
+* This allows you to move external objects into the data member of the closure object.
+
+```cpp
+auto pw = std:::make_unique<Widget>();
+auto func = [pw = std::move(pw)] 
+    {return pw->isValidated() && pw->isActive();}
+```
+* The lhs of `=` is the name of the data member of the closure class which is accessible by the lambda function body.
+* The rhs of `=` is the scope of where the lambda is declared
+* Does not allow default capture (`[=]` or `[&]`) but still allow variable capture by value or reference (`[&x]` or `[x]`)
+
+#### std::bind (C++11)
+
+* C++11 does not have access to *init capture*
+* To still move surrounding variables into the lambda, you can wrap the closure
+object in a `std::bind` object.
+* The bind object takes a callable object as the first argument and a variadic args which would be forwarded to
+the callable object args when it is called.
+  * Check `std::placeholders` on how to supply arguments when calling a bind object
+
+```cpp
+auto func = std::bind(
+  [](const std::vector<doubles>& data) 
+  {/** use of data */},
+  std::move(data))
+```
+* The first argument is a callable object
+* Second object is passed to the `std::bind` which would move-constructed as a data member to the bind object
+* The data member will then be passed to the lambda by lvalue reference
+* As the bind object is a wrapper around the closure object, you can treat objects in the bind as if they are in the closure
+
+#### Functor with init capture
+
+You can simulate lambda with init capture by using traditional functor
+
+```cpp
+class IsValAndArch {
+public:
+  using DataType = std::unique_ptr<Widget>;
+  explicit IsValAndArch(DataType&& ptr) : pw(std::move(ptr)) {}
+
+  bool operator()() const 
+  { return pw->isValidated() && pw->isArchived(); }
+private:
+  DataType pw;
+}
+
+auto func = IsValAndArch(std::make_unique<Widget>());
+```
+
+### Item 33: Use decltype on auto&& parameters to std::forward
+
+Active Recall:
+* By convention should the template arguments for `std::forward` be rvalue reference or lvalue reference
+
+Generic Lambda
+```cpp
+`auto f = [](auto x){return ...}`
+```
+
+Generic lambda perfect forwarding
+* In c++14, lambdas can accept generic types as parameters
+* `std::forward` will requires the types of the arguments to be supplied as
+template arguments (ie `std::forward<T>`). 
+* For generic lambda, the `T` is generated in the closure class and not
+accessible to the lambda expression
+* By convention when forwarding forwarding reference (`auto&& x`):
+  * If the argument is a lvalue reference, the template argument should be a lvalue
+    * This is because of reference collapsing: `& && -> &` perfectly forward lvalue
+    * Works perfectly with `decltype(x)` -> lvalue reference
+  * If the argument is a rvalue reference, the template argument should be non-reference
+    * This is because `_ && -> &&`
+    * Does not work as expected with `decltype(x)` -> rvalue reference instead of non-reference
+
+Solution:
+* use `std::forward<delctype(x)>(x)`
+* rvlaue: still works for rvlaue reference eventhough it does not follow convention
+  * reference collapsing of rvalue and rvalue `&& && -> &&`
+
+### Item 34: Prefer lambdas to std:bind
+ 
+ Lambdas vs `std::bind` with callable object
+* Lambdas are more readable than `std::bind`
+  * `std::bind`:
+    * To allow arguments for the callable object and capture surrounding variables
+    * You will need to use `std::placeholders` (`_1`,...) to state which argument should be forwarded from
+      `std::bind` constructor and which one should be forwarded when the bind object is called
+  * lambda: use simple capture syntax
+* Arguements are evaluated immediately
+  * `std::bind`:
+    * Args for `std::bind` constructor are evaluated immediately instead of when they are called
+* Overloaded function:
+  * `std::bind`: does not know how to resolve overloaded functions and will require casting to the right overloaded function
+* Performance:
+  * `std::bind`: callable object is stored as a function object in the bind object data member
+    * Calling bind will result in the function pointer being derefenced then called.
+
+## Chapter 7 Concurrency API
+
+### Item 35: Prefer task-based programming to thread-based
+
+**Active Recall**:
+* What are the ways to perform asynchrnous work in c++?
+* What type of threads does c++ create?
+* What happens when there are already too many threads and you try to create more
+* What are the downside to having a lot of threads
+
+**Types of thread**
+* **Hardware Threads**: threads that actually perform computation. The maximum number of hardware thread usually is
+usually equal to the number of processing unit (normally number of cores or 2 times number of cores if it is hyper threading)
+* **Software Threads**: threads that are managed by the operating system across all processes. OS will schedule the software thread
+to hardware thread. When a software thread is blocked, the OS can schedule other software threads.
+* `std::thread`: act as a handler to the underlying software thread. Some `std::thread` object could be null handlers when
+the `std::thread` is default constructed, moved, joined or detached
+
+**Disadvantages** of `std::thread`:
+* Could throw `std::system_error`:
+  * Software threads are limited resource and if you try to construct a `std::thread` when the limit is reach, it will throw
+  `std::system_error`
+  * Could solve this by executing the function on the current thread or wait for
+  existing software threads to complete. (hard to implement)
+* Over subscription:
+  * Over subscription due to more software threads than hardware threads when using `std::thread`
+  * Context switch into different CPU core:
+    * A software thread could be mapped to different core when it is context switch
+    * Result in cold CPU cache when context switch into a new CPU
+    * CPU cache "pollution" when the new software thread evicts previous (useful) cache entries
+
+**Advantage** of `std::async`:
+* Acts as a thread manager (decides if a software thread should be created)
+* Preventing out of thread exception:
+  * If there too many software thread, function will execute the task on the same thread requesting the result
+    * Thread calling `get` or `wait`
+    * **Does not** create a new thread
+    * Could occur when there is over subscription (but not close to limit)
+* Allows a return value from the function: get the result of async work
+* Use `std::launch::async` if you would to force a new thread to be created
+
+### Item 36: Specify `std::launch::async` if asynchronicity is essential
+
+**Active recall**:
+* What are the different types of launch policy?
+* What is the default type of launch policy?
+* Will a function guarantee to execute with the default launch policy?
+
+**Launch Policies**:
+* `std::launch::async` launch policy: `f` must be run asynchrnously (ie on a different thread)
+* `std::launch::deferred` launch policy: `f` may run **only** when `get`or `wait` is called on the future returned by `std::async`
+  * `f` execution is deferred until `get` or `wait` is called and will be executed synchronously
+  * If neither `wait` nor `get` is called, `f` will never run
+* **Default launch policy**:
+  * Policy is `async` or `deferred`
+  * `f` can be executed asynchrnously or synchronously
+  * Will decide on which policy to be executed to minimise over subscription and perform load balancing
+
+Implications of default policy:
+* Not possible to predict whether `f` will run concurrently with `t`. Could be `deferred` and run on `t` instead
+* Not possible to predict whether `f` runs on a thread different from the thread invoking `get` or `wait`
+  * Could create a software thread and mapped to another hardware thread
+* Not possible to predict whether `f` runs at all:
+  * Could be deferred and the future is not `get` or `wait` which will result in `f` not being executed at all
+* Spin lock with `wait_for` does not work
+  * If `f` is deemed to be deferred, it could never be executed and `future_status` will never be `ready`
+  ```cpp
+  auto fut = std::async(f);
+  while (fut.wait_for(100ms) != std::future_status::ready);
+  ```
+* Does not work well with `thread_local` variables
+  * `thread_local`: global variables that are only "local" to each thread
+  * As `std::async` does not guarantee a separate thread will be spawned, `f` could be in the same thread as the thread that calls `.get` or `wait`
+  which will result in the `thread_local` variable to be accessible by it too.
+
+Mitigations for default policy:
+* Spin lock:
+  * Use `fut.wait_for(0s) == std::future_status::deferred` to check what type of policy the library choose to use
+    * If `true` -> deferred policy is used and `get` or `wait` needs to be executed
+    * else -> `async` policy is used and spin lock with `while(fut.wait_for(100ms) != std::future_status::ready)` can be used
+* Only use when the task need not run concurrently with the thread calling `get` or `wait`
+* Thread's `thread_local` variable does not matter
+* Either it is ok if `f` is not called at all or it is guaranteed that `get` or `wait` is called later
