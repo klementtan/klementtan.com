@@ -1629,3 +1629,68 @@ Mitigations for default policy:
 * Only use when the task need not run concurrently with the thread calling `get` or `wait`
 * Thread's `thread_local` variable does not matter
 * Either it is ok if `f` is not called at all or it is guaranteed that `get` or `wait` is called later
+
+### Item 37: Make `std::threads` unjoinable on all paths
+
+**Active recall**:
+* What type of threads are joinable and unjoinable?
+* What happens when a joinable thread is desctructed?
+* What are the draw backs of implicit join on desctruction?
+* What are the draw backs of implicit detach on desctruction?
+* How do make threads unjoinable on all paths?
+
+States of `std::thread`
+* joinable:
+  * When a thread object corresponds to an underlying asynchrnous thread. The thread is still executing.
+  * Blocked or waiting threads are joinable
+* unjoinable:
+  * Threads that **do not** corresponds to underlying asynchrnous thread.
+  * Includes:
+    * `std::thread` that are default constructed
+      * No function to execute 
+    * `std::thread` objects that have been move away
+    * `std::thread` that have been joined. When a `join` is called on a thread
+    * `std::thread` that have been `detached`
+
+`std::thread` desctructor behaviour:
+* If a **joinable** `std::thread` is desctructed, the program and all threads will be terminated
+* Justification:
+  * Draw backs of implicit `join`:
+    * Could lead to performance anomalies
+    * The thread could block the function from returning
+  * Draw backs of implicit detach:
+    * If a thread has a reference to a memory on the stack, a detached thread would allow the function to return
+    * The stack frame will be popped off but the thread will be still be running
+    * This could lead to buggy behaviour (UB?)
+
+Solution: RAII-fy `std::thread`
+
+```cpp
+class ThreadRAII {
+public:
+  enum class DtorAction { join, detach };
+
+  ThreadRAII(std::thread&& t, DtorAction a) : action(a), t(std::move(t)) {}
+
+  ~ThreadRAII()
+  {
+    if (t.joinable()) {
+      if (action == DtorAction::join) {
+        t.join();
+      } else {
+        t.detach();
+      }
+    }
+  }
+
+  std::thread& get() {return t;}
+
+  private:
+    DtorAction action;
+    std::thread t;
+}
+```
+* `t` should be supplied as a rvalue ref (must be moved)
+* Good habit: Should declare `t` last as a thread should be constructed only 
+  when all variables are initialized
+* Should not have race condition as when the desctructor is called, there will be no access to it already
