@@ -1,6 +1,6 @@
 ---
 title: "162. Find Peak Element"
-excerpt: 162: Find Peak Element
+excerpt: Find Peak Element
 problem_id: 162 
 categories:
   - Leet Code
@@ -8,7 +8,7 @@ tags:
   - Binary Search 
 ---
 
-## Problem 
+## Problem
 
 **Problem ID**: [162](https://leetcode.com/problems/find-peak-element/)
 
