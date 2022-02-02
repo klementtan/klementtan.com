@@ -84,8 +84,8 @@ social:
 analytics:
   provider               : "google-gtag" # false (default), "google", "google-universal", "google-gtag", "custom"
   google:
-    tracking_id          : "G-W5YPH30E6X" # Replace this with your ID, or delete
-    anonymize_ip         : true
+    tracking_id          : "UA-155375693-4" # Replace this with your ID, or delete
+    anonymize_ip         : false 
 
 
 # Site Author
