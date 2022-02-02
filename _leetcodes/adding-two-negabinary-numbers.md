@@ -1,5 +1,5 @@
 ---
-title: "1073. Adding Two Negabinary Numbers"
+title: "1073: Adding Two Negabinary Numbers"
 excerpt: Adding Two Negabinary Numbers
 problem_id: 1073 
 categories:

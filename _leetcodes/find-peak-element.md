@@ -1,5 +1,5 @@
 ---
-title: "162. Find Peak Element"
+title: "162: Find Peak Element"
 excerpt: Find Peak Element
 problem_id: 162 
 categories:

@@ -1,5 +1,5 @@
 ---
-title: "871. Minimum Number of Refueling Stops"
+title: "871: Minimum Number of Refueling Stops"
 excerpt: Minimum Number of Refueling Stops
 problem_id: 871 
 categories:
