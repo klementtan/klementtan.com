@@ -1694,3 +1694,314 @@ public:
 * Good habit: Should declare `t` last as a thread should be constructed only 
   when all variables are initialized
 * Should not have race condition as when the desctructor is called, there will be no access to it already
+
+### Item 38: Be aware of varying thread handle desctructor behaviour
+
+**Active Recall**
+* What is a future?
+* What is a promise?
+* What happens when a future get destructed? Explain all the different scenarios
+* How is the return value of a asynchrnous task communicated to caller?
+
+**Future**: Act as an underlying handler to a software thread
+
+**Definitions**:
+* Caller: the function that calls the asynchrnous task
+* Callee: the asynchrnous task that is being called
+
+**Future and Promise**:
+* There is a communication between the caller and callee for the callee to pass the return value to the caller
+* The callee will wrap the return value in a **Promise** and pass it through the communication channel to the caller
+* The caller will receive the return value from the communication channel as a **Future**
+
+**Shared State**:
+* The result of the task is stored as a **Shared State** on the heap
+* Calle -> `std::promise` -> **Shared State** -> future -> caller
+* Why not on callee?
+  * The callee (asynchrnous task) might be completed before `get` is called.
+  * This will result to be destroyed before the caller can `get` the result
+* Why not caller?
+  * A future can be used to create `shared_future`
+  * If the result is stored on the caller's stack, the future will be destroyed eventhough other `shared_future` will be pointing to it
+
+**Future destructor**
+* For most cases a future destructor just destroy all data members of a future object
+  * Act as an implicit detach (the software thread is allowed to run free)
+  * Unlike `std::thread`, it will not terminate the program
+* Exception:
+  * When a certain set of conditions are met, the future will block until the asynchrnous running taks is complete
+    * Performs implicit join
+  * Conditions:
+    * **The future refers to a Shared State created due to a call to `std::async`**
+      * `std::future` can be created using `std::package_task` which makes `std::thread` behave
+      like a `std::async`. The destruction behaviour should not matter as `std::thread` destruction will take place.
+    * **When the task policy is `std::launch::async`** can be either due to runtime system (thread manager)
+    or it was specified in the code
+    * **The future is the last future referring to the shared state**
+      * `std::futures` are like shared pointers that points to an underlying resource (**Shared State**)
+      * Determined using a reference count
+  * Find a middle ground between program termination and drawbacks of implicit join or detach. Implicitly joining
+  only for asynchrnous task and last reference is destroyed can avoid problems of dangling pointers with implicit detach
+* This means that for detached task, they will never be executed if `get` is not called
+
+### Item 39: Consider `void` futures for one-shot even communication
+
+**Active Recall**:
+* How do condition variable work in c++?
+* Why do condition variable need mutex?
+* Ways a thread can notify another thread on an event?
+
+**Notification prolem**: A **detector** thread has to detect a condition that is only available to it and notify a
+**reactor** thread on the condition being met. The reactor thread should be blocked until the **detctor** thread notifies it.
+
+#### Condition Variable C++
+
+* C++ provides a `std::condition_variable` that allows thread to wait on the condition and notify on it.
+  * Similar to java monitor
+* When a thread calls `wait()`, conceptually it will block and be added to the queue.
+* Another thread can call `notify_one()`/`notify_all()` and wake up one/all the threads in the queue.
+* Takes in a callable object that will always be called before unblocking the thread
+  * The callback should return true if the condition is met else false
+* `std::condition_variable::wait` Takes a `unique_lock` that allows for the queue and condtions check call back to be thread-safe
+  * Without the lock a thread could return true (condition met) but another thread could change the condition
+* Common design
+  * Condition variable to be associated to an arbitrary condition. A thread will check the condition and if the condition is not
+met it will call `wait()`
+  * If another thread is able to make the condition to true, it will call `notify()`
+* Functions like non-hoarse monitor (susceptible to spurious wakeup)
+
+**Solving notification problem with condition variable**
+
+```cpp
+std::condition_variable cv;
+std::mutex m;
+
+// detector thread
+... // detect event
+cv.notify_one(); // tell reactor about event
+
+// reactor thread
+{
+  std::unique_lock<std::mutex> lk(m); // lock 
+  cv.wait(lk);
+}
+```
+* Code smell:
+  * Mutex is used for shared data but there no shared data in this situation
+* Problems:
+  * If the detector notifies before the reactor waits on the variable. The reactor it will never be woken up
+  after calling `wait`
+  * **Spurious wakeups**: the condition might change after the detector notifies and the reactor wakes up.
+  Can be resolved using a lambda to test for condition whenever a thread is a candidate for being unblocked.
+  This will not be feasible if the thread is unable to test for the condition.
+  ```cpp
+  cv.wait(lk, []{ //return ture when the event has occured })
+  ```
+
+#### Using promise as a notification channel
+
+* Promise can be used as communication channel without needing to execute any task
+* Will not need to use mutex, notification before wait is allowed and no suprious wakeups
+
+```cpp
+// shared variable
+std::promise<void> p;
+
+// detector
+... // detect event
+p.set_value();
+
+... // prepare to react
+p.get_future().wait();
+```
+
+Disadvantages:
+* Promise uses **Shared State** which will use heap-based allocation
+* `std::promise` can only be set once (one-shot)
+
+**Other use case**: If you would like to spawn a thread (get the overhead over and done with) and block immediately, while
+the main thread waits for the other work to be done.
+
+```cpp
+std::promise<void> p;
+
+void detect()
+{
+  auto sf = p.get_future().share();
+
+  std::vector<std::thread> vt;
+  for (int i = 0; i < threadsToRun; ++i) {
+    vt.emplace_back([sf]{ 
+      sf.wait();  // spawn thread and immediately wait for notification
+      react(); 
+      })
+  }
+
+  ...
+  p.set_value(); // notfy waiting threads that configs are set
+  ...
+  for (auto& t : vt) {
+    t.join();
+  }
+}
+```
+
+### Item 40: Use `std::atomic` for concurrency, volatile for special memory
+
+**Active Recall**:
+* What does `std::atomic` do?
+* Are all lines with `std::atomic` atomic?
+* What does `volatile` do?
+* Does `volatile` help with concurrency?
+
+#### `std::atomic`
+
+**Functionality**:
+* provides operations that are guaranteed to be seen as atomic by other thread.
+* Operations on `std::atomic` behave as if they were inside a mutex
+* read-modify-write (RMW) operations are atomic (`x++`, `x--`)
+* Prevent reodering:
+  * Without the presence of `std::atomic`, compilers are allowed to reorder independent statements for optimisation
+  * With `std::atomic`, statements **before a write** `std::atomic` cannot be reordered to occur afterwards.
+    * Enforce on the compiler and the underlying hardware
+  * Motivation: atomic variables are usually shared and reordering them could result in undesired behaviour
+
+**Non-functionallity**:
+* Does not guarantee that all statements are atomic 
+  * ie `std::cout << ai;`: the statements involves reading (atomic) atomic variable
+  and writing to stdout (non-atomic)
+* Copying of `std::atomic` is not allowed: compilers are unable to read a variable and write to another variable (copy)
+atomically. There are no hardware instructions to do so.
+  * Workaround: `std::atomic<int> y(x.load())` split up reading variable and writing to another variable into two
+  atomic operations
+
+#### `volatile`
+
+**Problem**: compiler will can remove any redundant reads (continuous reading different values into the same variable)
+or superflous writes (writing to the same variable twice). However, these reads and write might desired as they are
+mapped to a special memory (shared memory). ie writing twice to a variable but the 
+
+**Functionality**:
+* Prevents the compiler from removing any redundant reads or superflous writes to the variable.
+
+**Non-functionallity**:
+* Does not help with concurrency
+
+### Item 41: Consider pass by value for copyable parameters that are cheap to move and always copied.
+
+**Active Recall**:
+* What is the lifetime for a by-value parameters
+* Alternatives for functions that needs to copy the arguments into a container
+
+**Problem**: Implementing a function that needs to copy the provided argument into a container.
+
+**Overload rlvaue and lvalue**:
+```cpp
+class Widget {
+public:
+  void addName(const std::string& newName) { 
+    names.push_back(newName);
+  }
+  void addName(const std::string&& newName) { 
+    names.push_back(std::move(newName));
+  }
+}
+```
+* Takes the arguments by reference and copy construct for lvalue ref and move construct for rvalue ref.
+* Drawbacks:
+  * Code duplication: two identical functions
+  * Two function in object code
+* Cost:
+  * one copy for lvalue and one move for rvalue.
+  * Taking the args by reference are no-cost operations.
+
+**Forwarding reference**:
+```cpp
+class Widget {
+public:
+  template<typename T>
+  void addName(T&& newName) {
+    names.push_back(std::forwad<T>(newName));
+  }
+}
+```
+* Takes the argument by forwarding reference and forward the reference to `push_back`. `push_back` will move construct
+if the original argument is rvalue reference or copy construct if the original value is lvalue reference.
+* Disadvantages:
+  * Implementation must typically be in header files
+  * Eventhough only one function in source code, could be instantiated to many 
+  functions in object code. Each type that can be convertible to `std::string` will
+  instantiate a function.
+  * Bad error messages
+
+**Solution: pass by value**
+```cpp
+class Widget {
+public:
+  void addName(std::string newName) {
+    names.push_back(std::move(newName));
+  }
+}
+```
+* Copy the provided argument into the parameter. If the argument is lvalue, it will be copy constructed and if the argument is
+rvalue, it will be move constructed.
+* Move the parameter into the container.
+* When to use by value:
+  * Cheap to move: it incurs an additional move operation.
+  * Should be copyable parameter:
+    * If the parameter is move-only, only rvalue arguments can be provided to move construct the parameter.
+    * Will be better to take the argument by rvalue reference and forward it to the container. Incur one less move constructor.
+  * When the parameters are always copied on all path:
+    * If a path would not lead to the parameter being copied, passing by value will incur additional uneccassry copy right from the start.
+  * Not move assigning:
+    * It might be easier to copy assign to lvalue reference.
+    * If the parameter has a pointer to a dynamically allocated memory, passing by value will result in memory allocation and moving the parameter afterwards
+    will result in deallocating the memory.
+    * If the parameter is passed by reference, we will not copy the arguments and copy assignment operation might not incurr additional cost if the dynamically allocated
+    memory can be reused
+    * Note: For string copy assignment, if the `capacity` of the lhs is more than the length of the string on the rhs,
+    there might not be a need to allocate memory to the lhs.
+* Advantage:
+  * No code duplication
+  * No bad error message
+  * Only one function in object code
+* Disadvantages:
+  * Incur additional move construct for both lvalue and rvalue argument. This is due to additional move operation of the parameter (value)
+  into the container.
+  * Object slicing: if the parameter is a base class, passing a derived class into the parameter will result in object slicing (derived class characteristics will
+  be sliced off)
+
+### Item 42: Consider emplacement instead of insertion
+
+**Problem** with insertion:
+```cpp
+std::vector<std::string> vs;
+vs.push_back("xyzzy");
+```
+1. A temporary (`tmp`) `std::string` object is created from the string literal `"xyzzy"`.
+2. `tmp` is passed to `push_back` as a rvalue ref and a copy of `tmp` is constructed in the memory
+for `std::vector`. The copy is move constructed.
+3. `tmp` is destroyed and call the destructor
+
+With **emplace**:
+1. Forwards the string literal to the constructor of the element in the memory of the vector
+2. No temporary object created -> no extra construction and destruction of the temporary variable
+
+Heuristic to use `emplace`
+* **The value being added is constructed into the container, not assigned**:
+  * If the value is inserted to a place that has been constructed, the compiler will most probably
+  create a temporary object and move assign the object into place.
+  * A temporary object will be created even though it uses `emplace`
+  * Node-based containers always use construction to add new value and `emplace_back/front`
+* **The argument type(s) begin passed differ from the type held by the container**:
+  * `push_back` will result in a temporary object being created but `emplace` does not
+* **Container is unlikely to reject the new value as a duplicate**:
+  * If the container rejects duplicate, it will first create a node using the emplace arguments and compare the nodes.
+  This will result in the node being destroyed.
+  * Temp nodes are created more often for emplace than insertion
+
+**Caevet**: resource management objects (smart pointers) should be constructed outside of `emplace_back`
+* Using `emplace` will result the resource being constructed separately from it being wraped in the object. A leak
+could occur when an exception is thrown before the resource is wrapped.
+* `emplace` uses direct initialization but `push_back` uses copy initialization. Copy initialization **cannot** use explicit
+constructor but direct initialization can.
