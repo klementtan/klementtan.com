@@ -5,6 +5,7 @@ toc: true
 ---
 
 Title: Effective Modern C++ | 42 specific ways to improve your use of C++11 and C++14
+
 Author: Scott Meyers
 
 ## General Review

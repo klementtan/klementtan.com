@@ -9,7 +9,6 @@ Author: Vijay Garg
 
 ## General Review
 
-
 ## Chapter 2: Mutual Exclusion Problem
 
 ### Introduction
@@ -20,11 +19,13 @@ If two processors $$P_0$$ and $$P_1$$ increment(`x = x + 1`) a shared variable t
 `0`, the final value of `x` might not be `2`.
 
 Machine instructions for `x = x + 1`:
+
 * `LD R, x`: load register `R` from `x`
 * `INC R`: increment register `R`
 * `ST R, x`: store register `R` to `x`
 
 Certain interleaving of instructions could result in the value of `x` being `1`:
+
 * $$P_0$$ - `LD R0, x`: load register `R0` from `x` (`R0 = 0`)
 * $$P_0$$ - `INC R0`: increment register `R0` (`R0 = 1`)
 * $$P_0$$ - `LD R1, x`: load register `R1` from `x` (`R1 = 0`)
@@ -33,6 +34,7 @@ Certain interleaving of instructions could result in the value of `x` being `1`:
 * $$P_1$$ - `ST R1, x`: store register `R1` to `x` (`x = 1`)
 
 The underlying issue is that `x = x + 1` needs to be executed atomically
+
 * Code that needs to be executed automatically are called **critical section**
 * Problem of ensure critical section is executed atomically is called the **mutual exclusion problem**
 
@@ -65,6 +67,7 @@ class Attempt1 implements Lock {
 ```
 
 Issues: violates mutual exclusion
+
 * Checking and setting of `openDoor` are not done atomically
 * two process can read `openDoor = true`, exits the spinlock and enter CS
 
@@ -86,6 +89,7 @@ class Attempt2 implements Lock {
 ```
 
 Issues: starvation
+
 * Both process could set `wantCS` together, this will result both process to forever wait on each other
 
 #### Explicit turns
@@ -105,12 +109,14 @@ class Attempt3 implements Lock {
 ```
 
 Issues: starvation
+
 * When a process enters and exits a CS, only the other process is allowed to enter the critical section
 * If the other process is not waiting to enter the CS, the process will wait indefinitely to **re-enter** the CS.
 
 #### Peterson's Algorithm
 
 Combine the idea of double flag (to state intent to enter CS) and explicit turn.
+
 * Spin lock if the opposite party wants the CS and its the opposite party turn
 * Exit spin lock if the opposite does not want CS or it is not the opposite party turn
 * Exit CS by stating that it no longer wants CS
@@ -138,6 +144,7 @@ class PetersonAlgorithm implements Lock {
 ##### Mutual Exclusion Proof
 
 **Prove by contradiction**:
+
 * Assume both $$P_0$$ and $$P_1$$ are in the critical section
 * (klement: seems like proving by contradiction is the easiest way to prove mutual exclusion)
 
@@ -170,6 +177,7 @@ Case 1: When both $$P_0$$ and $$P_1$$ are in spinlock, the one whose `turn = i` 
 Case 2: When only $$P_0$$ or $$P_1$$ are in spinlock, the opposite `wantCS[i] = false` and break spinlock
 
 ##### No starvation proof
+
 * Will unstarve the other process by setting `wantCS` to false
 * If re-try CS after returning will set the `turn` to the opposite party
 
@@ -179,8 +187,11 @@ Aims to overcome the disadvantage of Peterson's Algorithm of only being able to 
 two processors
 
 *Intuition*:
+
 1. Doorway Step: Each process that requests critical section will receive a number
-  * The number will be later the request, the higher the number
+
+* The number will be later the request, the higher the number
+
 2. All process will check that all other process has completed the doorway step
 3. The process with the smallest number will be allowed into the critical section
 
@@ -231,7 +242,7 @@ class Bakery implements Lock {
 *Assertion 1*: If $$P_i$$ is in critical section and some other process $$P_k$$ has
 already chosen its number, then $$(number[i], i) < (number[k], k)$$
 
-* If $$P_i$$ is in critical section, then it has exited the kth iteration(`int j = k`) 
+* If $$P_i$$ is in critical section, then it has exited the kth iteration(`int j = k`)
 of busy waiting. It implies that:
   * `number[k] = 0`:
     * *Case 1*: $$P_k$$ has not entered the doorway $$\Rightarrow$$ will read the latest value
@@ -245,6 +256,7 @@ of busy waiting. It implies that:
 * From the code the `number[i]` is at least `0` initially and will be incremented by `1`
 
 *Mutual exclusion proof*:
+
 * If $$P_i$$ and $$P_k$$ are in critical section then their `number[i/j] > 0` (**assertion 2**)
 * From **assertion 1**, only either `(number[i], i) < (number[k], k)` or `(number[k], k) < (number[i], i)` can satisfy
 but for both to be in the critical section both must be true which is a contradiction
@@ -276,6 +288,7 @@ Disable all interrupts $$\Rightarrow$$ **disable context switching** $$\Rightarr
 $$\Rightarrow$$ no race condition
 
 Disadvantage:
+
 * not feasible if threads are mapped across different CPU
 * Interrupts are required for some operations
 
@@ -309,15 +322,15 @@ ReleaseCS(process_id) {openDoor.setValue(true);}
     * klement: This could lead to starvation as a process could be stuck in the spinlock forever. If $$P_0$$ is stuck in the spin lock and
     $$P_1$$ leaves the CS and immediately request the critical section. $$P_1$$ could set `wantCS[1] = true` immediately after setting `wantCS[1] = true` when exiting the CS and since the
     processes self-assign the turn, `turn` remains at `1`. This will result in $$P_0$$ getting starved
-    * answer: 
+    * answer:
       1. $$P_0$$: `wantCS[0] = true`
       2. $$P_0$$: `turn = 0`
       3. $$P_0$$: `wantCS[1] && (turn == 1)`
-        * enter CS as `wantCS[1] = false`
+      * enter CS as `wantCS[1] = false`
       4. $$P_1$$: `wantCS[1] = true`
       5. $$P_1$$: `turn = 1`
       6. $$P_1$$: `wantCS[0] && (turn == 0)`
-        * enter CS as `turn = 1`
+      * enter CS as `turn = 1`
   * **2.1.b** A process sets the turn variable before setting the `wantCS` variable
     * klement: idk
     * answer:
@@ -325,10 +338,10 @@ ReleaseCS(process_id) {openDoor.setValue(true);}
       2. $$P_0$$: `turn = 0`
       3. $$P_0$$: `wantCS[0] = true`
       4. $$P_0$$: `while(wantCS[1] == true && turn == 1)`
-        * $$P_0$$ enters CS as `wantCS[1] = false`
+      * $$P_0$$ enters CS as `wantCS[1] = false`
       5. $$P_1$$: `wantCS[1] = true`
       6. $$P_1$$: `while(wantCS[0] == true && turn == 0)`
-        * $$P_1$$ enters CS as `turn = 1`
+      * $$P_1$$ enters CS as `turn = 1`
 * **2.2**: Show that Peterson's algorithm also guarantee freedom from starvation
   * klement:
     * Assume that $$P_0$$ has been starved. This means $$P_0$$ is stuck on the spinlock for all iteration and $$P_1$$ gains the CS for all iteration 0 to N
@@ -336,19 +349,20 @@ ReleaseCS(process_id) {openDoor.setValue(true);}
     * However, $$P_0$$ is stuck at spinlock while $$P_1$$ sets `turn = 0` before checking the spin lock at `i + 1`
     * Therefore, at the `i + 1` iteration the value of `turn = 0` and contradicts that `turn = 1` at iteration `i` and `i+1`
 * **2.3**: Show that the bakery algorithm does not work in absence of `choosing` variable
-  * klement: idk 
+  * klement: idk
   * Ansewr:
     1. $$P_1$$: `number[1] = number[0]`
     2. $$P_0$$: `number[0] = number[1]`
-      * Both `number[0] = number[1] = 0`
-    3. $$P_1$$: `number[1]++ `
+    * Both `number[0] = number[1] = 0`
+    3. $$P_1$$: `number[1]++`
     4. $$P_1$$: `while(number[0] != 0 && Smaller(number[0], 0, number[1], 1))`
-      * Enter CS as `number[0] = 0`
+    * Enter CS as `number[0] = 0`
     5. $$P_0$$: `number[0]++`
     6. $$P_0$$: `while(number[0] != 0 && Smaller(number[0], 0, number[1], 1))`
-      * Enter CS as `number[0] == number[1]` but pid of $$P_0$$ is smaller
+    * Enter CS as `number[0] == number[1]` but pid of $$P_0$$ is smaller
 * **2.4**:
   * Question does the Dekker alogrithm fullfill all properties
+
     ```java
     class Dekker implements Lock {
       boolean wantCS[] = {false, false};
@@ -370,11 +384,12 @@ ReleaseCS(process_id) {openDoor.setValue(true);}
       }
     }
     ```
+
   * Answer: True for all 3 properties
   * Mutual Exclusion Proof:
     * Case 1: `turn = 0`
       * $$P_1$$ must have seen `wantCS[0] = false` (if not it will stuck at `while(turn == 0)`)
-      * $$\Rightarrow P_1$$ see that `wantCS[0] = false` in `while(wantCS[0])`. 
+      * $$\Rightarrow P_1$$ see that `wantCS[0] = false` in `while(wantCS[0])`.
       * $$\Rightarrow$$ $$P_0$$ havent execute `wantCS[0] = true`
       * $$\Rightarrow$$ when $$P_0$$ reach `while(wantCS[1])`, `wantCS[1] = true` and stuck in spinlock
     * Case 2: symmetry
@@ -400,6 +415,7 @@ The OS provides support for alternatives to busy waiting using spin lock
 #### Semaphore - Producer and Consumer
 
 Problem:
+
 * Producer and consumer share a single buffer of fixed size
 * Maintain a `inBuf` and `outBuf` (`outBuf` <= `inBuf` cyclically)
 * Requirement:
@@ -437,9 +453,10 @@ class BoundedBuffer {
   }
 }
 ```
+
 * General Idea:
   * Use semaphore to keep track the number of allowed deposit and fetch at any time
-    * Initially size * deposit and 0 * fetch operations allowed
+    * Initially size *deposit and 0* fetch operations allowed
   * When a deposit action is used up, a corresponding fetch operation will be allowed. Consumer can consume the produced item
   * The converse is true when a fetch operation is used up
 * deposit:
@@ -448,7 +465,7 @@ class BoundedBuffer {
   * deposit the item
   * Unlock the mutex (release the shared variable)
   * Increment the number of allowed fetch
-* fetch: 
+* fetch:
   * Decrement the number of allowed fetch. Block if all the allowed fetch has been used up (semaphore < 0)
   * Lock the mutex (gain access to shared variable)
   * fetch the item
@@ -458,10 +475,12 @@ class BoundedBuffer {
 #### Semaphore - Reader and Writer
 
 Problem:
+
 * No read-write conflict: reader and a writer do not access the database concurrently
 * No write-write conflict: two writer do not access the database concurrently
 
 With starvation
+
 ```cpp
 class ReaderWriter {
   int numReaders = 0;
@@ -489,6 +508,7 @@ class ReaderWriter {
   }
 }
 ```
+
 * startRead:
   * Lock shared variable `numReaders`
   * If the current reader is the first reader, try to get the write lock
@@ -499,17 +519,17 @@ class ReaderWriter {
   * If the current reader is the last reader release the write lock
   * Once release the write lock, release the share variable lock to allow other readers
 
-
 TODO: Add starvation free Reader and Writer
 
 ### Monitors
 
 Overview:
+
 * Monitor is a class that has data members and methods
 * Monitor Lock
   * Have synchronized methods or synchronized code block then ensure mutual exclusion with all
   other synchronized methods or code block.
-  * Only a single thread can execute code across all synchronized method or block at a time. 
+  * Only a single thread can execute code across all synchronized method or block at a time.
     * If thread 1 is in synchronized method 1 thread 2 cannot enter synchronized method 2
   * If a thread acquires the monitor lock, it is "in the monitor"
 * Conditional lock
@@ -521,7 +541,6 @@ Overview:
   condition queue
   * When another thread calls `notify()`, a thread in the condition queue will be blocked.
     * What happens next depends on the type of monitor lock (Hoare monitor or Java monitor)
-
 
 #### Hoare Monitor
 
@@ -543,12 +562,15 @@ that `t2` checks will be the same when `t1` unblocks
 5. `t1` enters the monitor and continue from `wait()` when `t2` exits the monitor
 
 **Disadvantage**:
+
 * There could be a change in state when `t2` calls `notify()` and `t1` unblocks from `wait()`.
 * `t2` could change the state/condition after calling `notify()`
 * To resolve this:
+
   ```cpp
    while (!B) x.wait();
   ```
+
 **Producer and Consumer**
 
 ```java
@@ -579,6 +601,7 @@ class BoundedBufferMonitor {
   }
 }
 ```
+
 * When any producer or consume start executing, it will always gain the monitor
 lock
 * Producer will block until there are space (`count < sizeBuf`) and consumer will wait until there are items (`count > 0`)
@@ -590,7 +613,7 @@ state and it will call `notify` to wake up any threads that are blocked
 
 Lock free reader writer
 
-```javaj
+```java
 Vector queue;
 int numReader; int numWriter;
 
@@ -634,33 +657,177 @@ synchronized (queue) {
 }
 ```
 
-### Chapter 6 Lambda Expressions
+## Chapter 4: Consistency Conditions
 
-Definitions
-* **Lambda expression**: a source code expression using the `[..](...){...}` syntax
-* **Closure**
-  * **Closure Class**: Each lambda expression will generate a Closure Class in *compile time*
-  * **Closure Object**: The instantiation of of a closure object
-    * There could be multiple closure object with the same closure class by invoking the copy ctor
-  * Example:
-    ```cpp
-    std::find_if(v.begin(), v.end(), [](int val){ return 0 < val && val < 10; })
-    ```
-    * The lambda expression will create a lambda class (compile time)
-    * The lambda class will instantiate a lambda object at runtime and pas it as the third argument
+### System Model
 
-#### Item 31: Avoid default capture modes
+#### General Definitions
 
-C++ provides 2 types of default capture modes:
-* `[&]`: capture all local non-static variables or parameters. However it has the following disadvantages:
-  * The captured variables will only live for the duration of the function (stored on stack)
-  * However, the closure object can live beyond the stack (ie by copying it to heap with adding to vector)
-  * This will result in closure object having a dangling reference
-  * Using non default reference capture `[&var]` will also lead to dangling reference but developers will be
-  more aware of it.
-* `[=]`: capture by value of all local non-static variables. Disadvantages:
-  * False sense of security by making the lambda look self-contained
-  * If the lambda is instantiated in a member function, it will capture `this` (pointer to the current object)
-    * Will result in dangling pointer of `this` when object is destructed
-  * Does not copy data members: need to use `[m_data = m_data]` (generalized lambda) syntax to capture data members.
-  * **Capture static variables by reference**: even though it uses capture by value, local static variables are captured by reference. Could result in different behaviour when there static variables change.
+**Concurrent System**: consist of a set of *sequential process* that communicate
+through *concurrent objects*
+
+**Concurrent Object**:
+* Has a *name*
+* Has a *type*:
+  * defines the set of possible values for the object
+  * defines the set of primitive *operations* to manipulate the object
+
+**Execution of operation**:
+* It takes time to execute an operation
+* Modelled by *invocation event* and *response event*
+* Notation:
+  * $$op(arg)$$ is an oepration on object $$x$$ issued at $$P$$. $$arg$$ denotes the operation input and output
+  * Invocation and Response events: $$inv(op(arg))$$ and $$resp(op(arg))$$ are abbreviated as $$inv(op)$$ and $$resp(op)$$
+
+$$proc(e)$$: denotes the process for the operation
+
+$$object(e)$$: denotes the *objects* associated with the operation
+* For this chapter, all operations are applied by a single process on a single object
+
+#### History
+
+**History** ($$H$$, $$<_ H$$):
+* Is a directed acyclic graph
+* $$H$$ is the set of operations
+* $$<_ H$$ is an irreflexible (no edge to itself) transitive (through other nodes) relation
+  * There is no transitive path to itself
+* Captures the occurred before relationship between operations
+
+**$$<_ H$$** definition:
+
+$$e <_ H f$$
+* $$resp(e)$$ occurred before $$inv(f)$$
+* If $$e$$ and $$f$$ overlap there is no $$<_ H$$ relation
+
+**Process order** definition
+
+$$(proc(e) = proc(f)) \wedge (resp(e) \text{ occurred before } inv(e))$$
+* For any two operations $$e$$ and $$f$$, the response of the first operation must occur before the invocation of the next (no overlapping operation) for
+the same process
+
+**Object order** definition
+
+$$(object(e) \cap object(f) \neq \emptyset) \wedge (resp(e) \text{ occurred before }inv(f))$$
+* For any two operation on the same object, the response of the first operation occur before the second
+* TODO: check if this definition
+
+**Process subhistory** ( $$H\mid P$$ ): is sequence of the events in $$e$$ in $$H$$ such that $$proc(e) = P$$ (all events involves $$P$$)
+
+**Object subhistory** ( $$H\mid P$$ ): is sequence of the events in $$e$$ in $$H$$ such that $$object(e) = x$$ (all events involves $$x$$)
+
+**Equivalent history**: two history are composed of exactly the same set of invocation and events.
+* Ordering of operations does not matter
+
+**Sequential History**: if $$<_ H$$ is a total order (DAG is a linear line).
+* History would occur if there was only one sequential process in the system (linear line of DAG)
+
+
+**Legal Sequential History**: it meets the sequential specification of all the objects (the specification for the object if only a single sequential process)
+* ie read-write register $$x$$ is legal if:
+  * every read operation that returns $$v$$, the latest write operation before the read operation has to write $$v$$
+* ie sequential queue:
+  * If the queue is not empty, it should return the item that is enqueued the earliest.
+  * If the queue is empty, then it should return null
+
+### Sequential Consistency
+
+**Sequential Consistency** definition: A history $$(H, <_ H)$$ is sequentially consistent if
+* there exists a sequential history $$S$$ equivalent to $$H$$ such that
+  * $$S$$ is legal sequential execution
+  * and $$S$$ satisfies process order
+    * Each process behaviour is the same in concurrent and sequential execution (ordering within the process is the same)
+
+Sequential Consistency Examples
+1. $$H_1 = P \ write(x,1), Q\ read(x), Q\ ok(0), P \ ok()$$
+  * $$H_1$$ is sequentially consistent as it is equivalent to the following legal sequential history
+    $$S = Q\ read(x), Q\ ok(0), P\ write(x,1), P\ ok()$$
+2. $$H_2 = P \ write(x,1), P \ ok(), Q\ read(x), Q\ ok(0)$$
+  * $$H_2$$ is a sequential history (operations are linear) but it is not legal (write 1 then read 0).
+  * It is sequentially consistent as it is equivalent to
+    $$S = Q\ read(x), Q\ ok(0), P\ write(x,1), P\ ok()$$
+3. $$H_3 = P \ write(x,1), Q\ read(x),P \ ok(), Q\ ok(), P\ read(x), P\ ok(0)$$
+  * Is not sequentially consistent as the process order must be maintained
+    * P writes 1 before P reads 0 which is not possible as there are no other write operation
+4. $$H_4 = P\ write(x,1), Q\ read(x), P\ ok(), Q\ ok(2)$$
+  * Not sequentially consistent as no equivalent history will contain a write(x,2) for Q to read 2
+
+### Linearizability
+
+**Intuition**: If we assume that each operation occurs instantaneously at any point between the invocation and response,
+the execution is legal.
+
+**Linearizability Definitions**:
+* Lecture Notes:
+  * execution is equivalent to some legal execution such that each operation happens instantaneously at some point between the invocation and response
+* Text Book:
+  * A history ($$H, <_ H$$) is linearizable if
+    * There exists a sequential history ($$S, < $$) equivalent to $$H$$
+    * And it preserves $$<_ H$$
+      * Non-overlapping operations need to maintain ordering
+
+**Examples**:
+* $$H_1 = P\ write(x,1), Q\ read(x), Q\ ok(x), P \ ok()$$
+  * Is linearizable as both operations are overlapping and do not have $$<_ H$$ relationship
+  * Equivalent to:
+    $$Q\ read(x), Q\ ok(0), P\ write(x,1), P\ ok()$$
+* $$H_2 = P\ write(x,1), P\ ok(), Q\ read(x), Q\ ok()$$
+  * There is a $$P\ write <_ H Q\ read$$ relationship and we need to maintain it.
+  * This means that we have to write x = 1 before reading x = 0 which is not legal
+
+### Local Property
+
+**Local Property** for linearizablity definition: for all objects $$x$$, $$H\mid x$$ is linearizable $$\Rightarrow$$ $$H$$ is linearizable
+
+**Local Property** for sequential consistent:
+* Does not hold for sequential consistency
+
+#### Local Property Proof
+
+1. Given linearization of all objects $$x$$ ($$H\mid x$$), we will have a linear DAG ($$S_x, <_ x$$)
+2. Construct an acyclic graph that orders all operations on any object
+  * Combining all the DAGs across all objects ($$<_ x$$)
+  * Includes all the ordering in history across objects ($$<_ H$$)
+    * This graph preserves $$<_ H$$ which checks the second condition of linearizablity
+3. Show that the new graph is acyclic (sequential history):
+  * $$<_ x$$ are acyclic (linearizable) so if a cycle exists it must involve two objects
+  * Can combine all adjacent similar edge:
+    * Two adjacent $$<_ {x_1}$$  and $$<_ {x_2}$$ into a single edge
+    * Two adjacent $$<_ {H_1}$$  and $$<_ {H_2}$$ into a single edge
+  * End up with $$<_ H , <_ x , <_ H$$ or  $$<_ x , <_ H , <_ x$$
+  * If $$<_ H , <_ x , <_ H$$ leads to a cycle means there is a cycle in $$<_ H$$ which contradicts as all $$<_ H$$ is transitively irreflex
+  
+### Casual Consistency (out of CS4231 scope)
+
+**Intuition**: Minimum possible time to read and write is less than the communication latency
+* It takes a long time for a process to know of write events by other process (ie distributed memory)
+* There is a communication delay for events
+
+**Definitions**: A history ($$H, <_ H$$) is casusally consisten if for each process $$P_i$$, there is a legal sequential history ($$S_ i, <_ {S_i}$$)
+* Where $$S_i$$ is the set of all operations of $$P_i$$ (only $$P_i$$) 
+* All the write operations in $$H$$
+* $$<_ {S_i}$$ respects the following order:
+  * Process order: If $$P_i$$ performs $$e$$ before $$f$, then $$e$$ is ordered before $$f$$ in $$S_i$$
+  * Object order: all operations must be legal (read-write legal)
+
+Notes:
+* Related writes be seen by all process in the same order
+* Concurrent writes may be seen in different order
+* Sequential consistency -> Casual Consistency
+* Casual Consistency implies that legal sequential history for every process and not for the entire system
+
+
+### Consistency Definitions for Registers
+
+* **atomic**:
+  * Linearizable history
+* No name for sequential consistent history
+* Regular:
+  * When read does not overlap with write
+    * read returns the most recent write
+  * When read overlap with write
+    * read returns one of the most recent write 
+    * or the value written by one of the overlapping writes
+* Safe:
+  * When read does not overlap with any write:
+    * returns the value written by one of the most recent writes
+  * When read overlaps with writes, can return anything
