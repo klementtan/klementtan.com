@@ -831,3 +831,222 @@ Notes:
   * When read does not overlap with any write:
     * returns the value written by one of the most recent writes
   * When read overlaps with writes, can return anything
+
+## Chapter 7: Models and Clocks
+
+**Motivation**: to allow for ordering of events in a distributed system. Types of ordering:
+* Physical time model: assume that there is a shared physical clock where you
+can get the time of all events. This will allow you order of all the events where
+events of different processes will be interleaved.
+* Happened before model: where you only order events if one **happen-before** another. This will result in partial ordering as not all
+events happened-before.
+
+### Model of a Distributed Systems
+
+**Characteristics**:
+* **Absence of a shared clock**: it is impossible to have a completely in-sync
+shared clock.
+* **Absence of shared memory**: no process can have a global view of all process
+* **Absence of accurate failure detection**: not possible to determine if a process is slow or has
+failure.
+
+**Application**: based on message passing between processes.
+* Messages are passed asynchronously between processes
+* Consist of a set of $$N$$ processes.
+* *Channel*: Consists of a set of unidirectional communication channel between two processes.
+  * Channel has infinite buffer and error free.
+  * State of a channel is the sequence of messages sent but not yet received.
+* *Process*:
+  * Has a defined set of states and initial condition (initial state)
+  * Each event:
+    * May change the state of the process
+    * And state of at most one channel (cannot send to multiple channel at the sametime)
+
+### Model of Distributed Computation
+
+#### Interleaving Model
+* Defines a *run* as a global sequence of events (across multiple processes)
+* Events can be totally ordered
+
+#### Happened-Before Model
+* Definition: The **happened-before** relationship ($$\rightarrow$$) is the **smallest** relation that satisfy
+  * If $$e$$ before $$f$$ in the **same process** then $$e \rightarrow f$$ (Same process)
+  * If $$e$$ is the **send event** of a message and $$f$$ is **receive event** then $$e \rightarrow f$$ (Send-receive)
+  * If there exists an event $$g$$ such that $$e \rightarrow g$$ and $$g \rightarrow f$$ then $$e\rightarrow f$$ (transitive)
+* A *run* is defined by a tuple $$(E, \rightarrow)$$ where $$E$$ is the set of all events and $$\rightarrow$$ is the partial ordering
+* Transitive edges are not drawn (smallest relation)
+* In distributed computing only has **happened-before**
+
+## Logical Clocks
+
+Goal: Gives a *total order* that *could have* happened.
+
+Logical Clock constraint: map from set of events to a set of natural number (each event has a number) that satisfy the following constraint
+
+$$\forall e,f \in E: e \rightarrow f \Rightarrow C(e) < C(f)$$
+
+* $$\rightarrow$$ represent happen before
+* Contrapositive not true: the clock of $$e$$ can be smaller than $$f$$ but that does not mean that the two events have a happen before relationship
+
+```java
+public class LamportClock {
+
+  int c;
+  public LamportClock() {
+    c = 1;
+  }
+  public int getValue() {
+    return c;
+  }
+
+  public void tick() { // internal event
+    c = c + 1;
+  }
+
+  public void sendAction() {
+    // send message to receiver with c
+    c = c + 1;
+  }
+
+  public void receiveAction() {
+    c = Util.max(c, sentValue) + 1;
+  }
+}
+```
+* Initialization: all process will initialize their clock to `1`
+* tick: represent an internal event occurred -> increment the
+* sendAction: send the message with the current time and then increment the current time at the end.
+* receiveAction: get the max of current time and time sent but sender then increment the time.
+
+Total Ordering $$<$$:
+
+$$ (s.c, s.p) < (t.c, t.p) = (s.c < t.c) \vee ((s.c = t.c) \wedge (s.p < t.p))$$
+
+>
+
+## Vector Clock
+
+Definition: a map from state to a vector of dimension (n) with the following constraint
+
+$$\forall s,t : s \rightarrow t \Leftrightarrow s.v < t.v$$
+* As $$\rightarrow$$ (happen-before) is a partial order, $$<$$(>) is also a partial order
+
+Comparing vectors:
+
+$$x < y = (\forall k : 1 \leq k \leq N : x[k] \leq y[k]) \wedge (\exists j : 1 \leq j \leq N: x[j] < y[j])$$
+
+* Elementwise $$\leq$$ but one element must be strictly less than
+
+$$x \leq y = (x < y) \vee (x = y)$$
+
+```java
+public class VectorClock {
+  public int[] v;
+  int myId;
+  int N;
+  public VectorClock(int numProc, int id) {
+    myId = id;
+    N = numProc;
+    v = new int [numProc];
+    for (int i = 0; i < N; i++) v[i] = 0;
+    v[myId] = 1
+  }
+
+  public void tick() {
+    v[myId]++;
+  }
+
+  public void sendAction() {
+    // send message and include the vector in the message
+    v[myId]++;
+  }
+
+  public void receiveAction(int[] sentValue) {
+    for (int i = 0; i < N; i++)
+      v[i] = Util.max(v[i], sentValue[i]);
+    v[myId]++;
+  }
+
+  public int getValue(int i) {
+    return v[i];
+  }
+}
+```
+* Each process will have an interpretation of what progress (time) of all other process.
+  * The interpretation of the current process time can only be updated by the current process
+  * The interpretation of other process time can only be updated by receiving other process interpretation
+* Construction:
+  * Initialize all other process except the current process to `0`, current process is set to `1`
+* tick:
+  * Only increment the current process time by `1`
+* sendAction:
+  * Send the current process interpretation of all processes' time (send entire vector clock)
+* receiveAction:
+  * Perform element wise max with the sender interpretation of all process time (sender's vector clock)
+    * Updates the current process interpretation if the sender interpretation is more updated
+  * Progress the current process clock
+
+### Direct Dependency Clock
+
+* Same as vector clock but instead of updating the current process interpretation of all process time (vector clock) will
+only update the current process interpretation of the sender time.
+
+### Matrix Clock
+
+A process will store all process interpretation of other processes time.
+* This will allow a process know if all other process saw that process's event.
+
+Components:
+* Each process with store a $$N\times N$$ matrix where the $$j$$th row of $$P_i$$
+represents $$P_i$$ interpretation of what $$P_j$$ interpret other processes time to be.
+* $$i$$th row of $$P_i$$ represents the vector clock of $$P_i$$
+
+```java
+public class MatrixClock {
+  int[][] M;
+  int N;
+  int myId;
+  public MatrixClock(int numProc, int id) {
+    myId = id;
+    N = numProc;
+    M = new int[N][n];
+    for (int i = 0; i < N; i++)
+      for (int j = 0; j < N; j++)
+        M[i][j] = 0
+    M[myId][myId] = 1;
+  }
+
+  public void tick() {
+    M[myId][myId]++;
+  }
+
+  public void sendAction() {
+    // send the matrix with the message first
+    M[myId][myId]++;
+  }
+
+  public void receiveAction() {
+    for (int i = 0; i < N; i++)
+      if (i != myId)
+        for (int j = 0; j < N; j++)
+          M[i][j] = Util.max(M[i][j], W[i][j]);
+
+    for (int j = 0; j < N; j++)
+      M[myId][j] = Util.max(M[myId][j], W[srcId][j])
+    M[myId][myId]++;
+  }
+}
+```
+* Construction:
+  * Initialize all to `0` except for $$P_i$$ interpretation of its own time `M[i][i] = 0`
+* tick:
+  * Progress its own interpretation (`M[i][i]`) by 1
+* sendAction:
+  * Send its own interpretation (matrix clock) and progress its own interpretation by 1
+* receiveAction:
+  * for all other process's interpretation (`M[j]` where `j!=i`) perform elementwise max
+  * for the current process interpretation (`M[i]`) perform elementwise max with the sender's interpretation (`W[j]`)
+  * lastly progress the current time
+
+Application:
+* If `\forall j : M[j][i] \geq k`, all process are aware of event `k` in `M`.
