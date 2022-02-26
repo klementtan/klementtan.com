@@ -806,7 +806,7 @@ the execution is legal.
 * Where $$S_i$$ is the set of all operations of $$P_i$$ (only $$P_i$$) 
 * All the write operations in $$H$$
 * $$<_ {S_i}$$ respects the following order:
-  * Process order: If $$P_i$$ performs $$e$$ before $$f$, then $$e$$ is ordered before $$f$$ in $$S_i$$
+  * Process order: If $$P_i$$ performs $$e$$ before $$f$$, then $$e$$ is ordered before $$f$$ in $$S_i$$
   * Object order: all operations must be legal (read-write legal)
 
 Notes:
