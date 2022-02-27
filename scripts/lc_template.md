@@ -8,7 +8,7 @@ tags:
   - Leet Code
 ---
 
-## Problem 
+## Problem
 
 **Problem ID**: [{QUESTION_ID}](https://leetcode.com/problems/{TITLE_SLUG}/)
 
