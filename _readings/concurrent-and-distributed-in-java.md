@@ -1049,4 +1049,177 @@ public class MatrixClock {
   * lastly progress the current time
 
 Application:
-* If `\forall j : M[j][i] \geq k`, all process are aware of event `k` in `M`.
+* If $$\forall j : M[j][i] \geq k$$, all process are aware of event `k` in `M`.
+
+## Chapter 9: Global Snapshot
+
+### Overview
+
+Problem: take a snapshot of a distributed system that could allow a system to be replayed.
+
+*Global State* definition:
+* *Time-based model*: a snapshot taken at a certain time
+* *Happened-before model*: a set of local states that are concurrent with each other.
+  * *Concurrent*: no two state have happened-before relationship
+
+Global state *relationship*:
+* A global state in *time-based* model **is** a global state in *happened-before*.
+  * If you take a snapshot with a synchronized clock it will also be a happened-before
+* A global state in *happened-before* **is not** a *time-based* model (converse not true)
+  * A *happened-before* state might not have actually happened in an instance of time previously.
+
+Choosing *happened-before* over *time-based* model:
+* Impossible to get *time-based* model without a synchronized clock.
+* *happened-before* allows for easy reasoning of mutual exclusion.
+
+**Cut** (Global State) definition: of a computation model $$(E, \rightarrow)$$ (events and happened before relationship)
+with total order ($$\succ$$) [$$e \succ f$$: $$e$$ can be ordered before $$f$$ based on time].
+
+A *cut* is any subset $$F \subseteq E$$ such that
+
+$$ f \in F \wedge e \succ f \Rightarrow e \in F$$
+
+* If $$f$$ is in the cut and $$e$$ is ordered before $$f$$ then $$e$$ is also in the cut
+
+**Consistent Cut** definition:
+
+$$ f \in F \wedge e \rightarrow f \Rightarrow e \in F$$
+
+* If $$f$$ is in the cut and $$e$$ **happened-before** $$f$$ then $$e$$ is also in the cut.
+
+**Snapshot of messages**:
+* Cut should include messages that are in transit at that instance
+* Messages can change the local state of a process.
+* If the snaphot is taken on $$P_i$$ after message is sent from $$P_i$$ to $$P_j$$
+  * but $$P_j$$ has already taken a local snapshot (maybe $$P_i$$ to $$P_j$$ slower than $$P_i$$ to $$P_k$$ to $$P_j$$)
+  * the messages sent by $$P_i$$ to $$P_j$$ initially should be part of the global state.
+
+### Chandy and Lamport's Global Snapshot Algorithm
+  
+#### Algorithm Overview
+
+**Requirement**:
+* Communication channel are unidirectional (easily extend to bidirectional by adding two channel)
+* Communication channel are FIFO
+
+**Colouring**:
+* Each process is assigned a colour of **white** or **red**:
+  * **White**: represents before the snapshot was taken
+  * **Red**: represents after the snapshot was taken
+* A global state snapshot is right before all the process turn **red**
+  * A local state snapshot is right before a process turn **red**
+
+**Messages**:
+* When a process turns **red** it will send a **marker** to all of its neighbours
+* A process will turn **red** once it receives a **marker** if it has not already done so.
+* Types of state of channels:
+  * **ww** - white to white messages: sent and received before the snapshot. Process will update local
+  state based on the message before snapshot thus ww messages can be ignored.
+  * **rr** - red to red messages: sent and received after the snapshot. This message does not affect
+  the local snapshot and can be ignored.
+  * **rw** - red to white messages: not possible as all red process will send a marker to all neighbours. All neighbours
+  will turn red before receiving any red messages.
+  * **wr** - white to red messages: messages sent by white process.
+    * Intuively, this could be a ww message if it was sent instantaneously. Thus the receiving process could
+      be in a different state before the snapshot if the message was processed instantaneously.
+    * Happens when the receiving process already received a "marker" from another process and already recorded
+      local snapshot before receiving the message.
+
+#### Algorithm
+
+**State**:
+* `myColour`: Process will track their own colour
+* `closed[k]`: Each process will track the colour of neighbouring process.
+  * `closed[k] = true` when receive a marker from $$P_k$$
+* `chan[]`: for each neighbour, store a buffer that contains all **wr** messages. Print from buffer once the sender (previously white)
+turns **red** (send marker).
+
+
+```java
+public class RecvCamera extends Process implements Camera {
+  static final int white = 0; red = 1;
+  int myColor = white;
+  boolean closed[];
+  CamUser app;
+  LinkedList chan[] = null;
+  public RecvCamera (Linker initComm, CamUser app) {
+    super(init(Comm));
+    closed = new boolean[N];
+    chan = new LinkedList[N];
+    for (int i = 0; i < N; i++) {
+      if (isNeighbour(i)) {
+        closed[i] = false;
+        chan[i] = new LinkedList();
+      }
+    }
+    this.app = app;
+  }
+
+  public synchronized void globalState() {
+    myColor = red;
+    // record local state
+    app.localState(); 
+    // send marker to neighbours
+    sendToNeighbours("marker", myId);
+  }
+
+  public synchronized void handleMsg(Msg, m, int src, String tag) {
+    if (tag.equals("marker")) {
+      // signifies that src is red
+      if (myColor == white) globalState(); // record global state once
+      // will no longer receive white messages from src
+      closed[src] = true;
+
+      // Check if all channels are closed
+      if (isDone()) {
+        System.out.println("Channel State: Transit Messages");
+        for (int i = 0; i < N; i++) {
+          if (isNeighbour(i)) {
+            // print any wr messages
+            while (!chan[i].isEmpty()) {
+              System.out.println(
+                char[i].removeFirst().toString()
+                  );
+            }
+          }
+        }
+      } else {
+        if (myColor == red && !closed[src]) {
+          // signifies wr message. Src is white and this process is red
+          chan[src].add(m);
+        } 
+
+        // all other messages can be handled normally.
+        app.handleMsg(m,src, tag);
+      }
+    }
+  }
+
+  bool isDone() {
+    if (myColor == white) return false;
+    for (int i = 0; i < N; i++) {
+      if (!closed[i]) return false;
+    }
+    return true;
+  }
+}
+```
+Steps
+1. When globalState is initiated at a particular process, it will send a marker to all neighbouring process.
+2. When the other process receive the marker it will turn red and relay to its neighbours
+  1. If in other white process send a message to this red process, that message matters and will be added
+  to the channel state
+3. End when all process has turned red.
+
+### Global Snapshot for non-FIFO channel
+
+* Each message will contain the colour of the process.
+* The receiver will keep looking for white messages from the sender eventhough it receives a red message already (ordering no guaranteed)
+
+(not in scope of CS4231)
+
+### Channel Recording by the Sender
+
+* To prevent any lost message not being in the state.
+* A white sender will keep a buffer of all outing messages before the marker is sent.
+* A white receiver will ACK all white messages. ww messages can be removed from the state.
