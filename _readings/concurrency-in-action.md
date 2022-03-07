@@ -320,8 +320,257 @@ T parallel_accumulate(Iterator first, Iterator last, T init) {
 }
 ```
 
-### Identifying threadso
+### Identifying threads
 * Use `std::this_thread::get_id()`
 * Useful if the main thread needs to perform similar but slightly separate work.
-* Defaults to `std::thread::id` 
-* test
+* Defaults to `std::thread::id`
+
+## Sharing data between threads
+
+### Problems with sharing threads
+
+**Invariants** definition: statement that are always true about a paritcular data structure.
+* Doubly linked list: If the next pointer of node `A` is `B`, then the previous pointer of `B` must be `A`
+* Broken invariants usually occur mid way through updating a data structure.
+
+#### Race Conditions
+
+**Generic Definition**: outcome depends on the relative ordering of execution of operations on two or more threads.
+
+**Benign race condition**: when the invariant of the data structure is not broken
+
+**Problematic race condition**: when the invariant of the data structure is broken
+* Data race: concurrent modification of a single object (UB)
+* Usually occurs when an operation requires modifying two or more distinct pieces of data.
+
+### Protecting shared data with mutex
+
+**Using mutex**
+* Create a mutex with `std::mutex`
+* RAII-fy mutex with `std::lock_guard` which locks on construction and unlocks on destruction.
+* Best practice is to group the mutex and data in a class instead of as global variables.
+* Locking a `std::mutex` already held is UB
+
+**Structuring code for protecting data**
+* Shoud not pass a pointer or reference to the protected data **out** of the function (return value)
+* Should not pass a pointer or reference to the protected data **into** other function (arguments to other functions)
+  * Other functions can save a pointer to the data.
+
+**Spotting race conditions inherent in interfaces**: (thread safe-stack)
+* Problem: calling `s.empty()`, getting the top value `s.top()` and lastly `s.pop()`. As, `s.empty()` and `s.top()` are separate operations, the stack could be poped after the empty check but before `top()`.
+* Solutions:
+  * Combing `top()` and  `pop()` (similar to python)
+    * When the value of the top element is returned to the caller, it will copy constructed into the call site code. If the copy constructor throws an exception, the top value will be lost forever.
+  * Pass in a reference (out-param)
+    * Instead of returning the top value, you can pass an out-param for the function to assign the top value to.
+    * This will allow the stack to make the `top` and `pop` operation to be atomic.
+    * Cavaets:
+      * Need to default construct the object first and pass the reference to `pop`
+    ```cpp
+    std::vector<int> resutlt;
+    some_stack.pop(result);
+    ```
+  * Require a no-throw copy constructor or move constructor
+  * Return a pointer to the popped item.
+    * Allocate the top object on the heap and returning a pointer to it.
+  * Example:
+    ```cpp
+    template<typename T>
+    class threadsafe_stack
+    {
+    private:
+      std::stack<T> data;
+      mutable std::mutex m;
+    public:
+      threadsafe_stack() {}
+      threadsafe_stack(const threadsafe_stack& other)
+      {
+        std::lock_guard<std::mutex> lock(other.m);
+        data = other.data;
+      }
+      threadsafe_stack& operator=(const threadsafe_stack&) = delete;
+      void push(T new_value)
+      {
+        std::lock_guard<std::mutex> lock(m);
+        data.push(std::move(new_value));
+      }
+      std::shard_ptr<T> pop()
+      {
+        std::lock_guard<std::mutex> lock(m);
+        if (data.empty()) throw empty_stack();
+        std::shared_ptr<T> const res(std::make_shared<T>(data.top()));
+        data.pop();
+        return res;
+      }
+      void pop(T& value)
+      {
+        std::lock_guard<std::mutex> lock(m);
+        if (data.empty()) throw empty_stack();
+        value = data.top();
+        data.pop();
+      }
+
+      bool empty() const
+      {
+        std:::lock_guard<std::mutex> lock(m);
+        return data.empty()
+      }
+    }
+    ```
+
+### Deadlock: the problem and solution
+
+**Deadlock**: occurs when having to lock two or more mutexes in order to perform an operation.
+
+**Solution**:
+* Lock the mutexes in the same order
+  * Not straightforward when the mutex belongs to two instances of the same class. (Cannot order the mutexes)
+* `std::lock`: can lock two or more mutexes at once (all or nothing semantic)
+  ```cpp
+  friend void seap(X& lhs, X& rhs) {
+    if (&lhs != &rhs) return;
+    std::lock(lhs.m, rhs.m);
+    std::lock_guard<std::mutex> lock_a(lhs.m, std::adopt_lock);
+    std::lock_guard<std::mutex> lock_b(lhs.m, std::adopt_lock);
+    swap(lhs.some_details, rhs.some_details);
+  }
+  ```
+  * Check that the address are not the same to prevent double locking of the same mutex
+  * `std::adopt_lock` used to indicate the lock guard should adpot ownership of the lock.
+  * `std::scoped_lock guar(lhs.m, rhs.m)` that does the `lock` with RAII-fying it.
+  * Does not help if the lock should be acquired separately.
+* Avoid nested locks:
+  * Avoid acquring a lock if you already have one. This will ensure that each thread has a most one lock and will not lead to deadlock.
+* Avoid calling user supplied code while holding a lock
+* Acquiring locks in fixed order (Bad thread-safe linked list)
+  * Uses hand-over-hand locking style. To read the `ith` node you will need to lock `[0, i-1]` node.
+  * If the ordering of locking the nodes are not guaranteed, a forward iterator and backward iterator could progress and have a deadlock halfway.
+* Use lock hierachy:
+  * A special kind of lock that ensures a total ordering of locks you can acquire.
+  * After locking a mutex with hierachy `k`, you can only lock mutexes with hierachy `<k`
+  * This will ensure the ordering of nested lock and the same for all threads.
+  * Hierarchical mutex
+    ```cpp
+    class hierarchical_mutex
+    {
+      std::mutex internal_mutex;
+      unsigned long const hierarchy_value;
+      unsigned long previous_hierarchy_value;
+      // thread_local -> the static variable can be different for different threads 
+      // but same throughtout different instances on the same thread
+      static thread_local unsigned long this_thread_hierarchy_value;
+
+      void check_for_hierarchy_violation()
+      {
+        // checks against the static variable
+        if (this_thread_hierarchy_value <= hierarchy_violated) {
+          throw std::logic_error("mutex hierarchy violated")
+        }
+      }
+
+      void update_hierarchy_value()
+      {
+        previous_hierachy_value = this_thread_hierarchy_value;
+        this_thread_hierachy_value = hierarchy_value;
+      }
+
+    public:
+      explicit hierchical_mutex(unsigned long value) :
+        hierarch_value(value), previous_hierarchy_value(0) {}
+      
+      void lock()
+      {
+        check_for_hierarchy_violated();
+        internal_mutex.lock();
+        update_hierarchy_value;
+      }
+
+      void unlock()
+      {
+        if (this_thread_hierarchy_value != hierarchy_value)
+          throw std::logic_error("mutex hierarchy violated")
+        this_thread_hierarchy_value = previous_hierarchy_value;
+        internal_mutex.unlock();
+      }
+      bool try_lock() {
+        check_for_hierarchy_violation();
+        if (!internal_mutex.try_lock())
+          return false;
+        update_hierarchy_vlaue();
+        return true;
+      }
+    }
+    thread_local unsigned long hierarchical_mutex::this_thread_hierarchy_value(UINT_MAX);
+    ```
+  * Flexible locking with `std::unique_lock`:
+    * Unlike `lock_guard`, `unique_lock` does not nee dto always lock the mutex
+    * Can pass `std::adopt_lock` to lock the object on construction or `std::defer_lock` to make the lock `unlocked` upon construction. The lock can be acquired later by calling `lock` or `std::lock`
+    * `unique_lock` is move constructable 
+    * Cost:
+      * Stores a flag to indicate if the mutex is locked or unlocked. 
+      * Need to know during destruction, if mutex lock then should unlocked if mutex is unlocked then do nothing
+
+**Locking at an appropriate grannularity**
+* Lock a mutex only when accessing shared data
+* Any processing  of data should be done outside of the lock
+
+### Alterantives facilities to protecting shared data
+
+**Protecting shared data during initialization**
+* Static variable initialization:
+  * Pre C++11: static variable are initialized the first time control (imperative code order) flow passes through its declaration. Multiple thread may believe that they are the first causing multiple concurrent initialization of the same varaible.
+* Lazy initialization of a singleton class (DB connection`)
+  * Requires checking if the shared data is initialized, then initializing it if it is not present
+* Solutions:
+  * Locking before the initiliazation check, unlocking after the initializaiton 
+    * Expensive as it requires lock acquisation even after initialization 
+  * Double locking:
+    * pointer is first read without acquiring the lock. If pinter is present, return the pointer
+    * Else acquire the lock and check the pointer again. Return the pointer if present (the pointer just initialized)
+    * Else initialize the data
+    * UB: The read outside the lock is not synchronized with the write outside the lock. We do not know that the read and write of pointer is single instruction.
+  * Call once:
+    * Using `std::call_once` that makes sure that a function is called once. Uses an additional `std::once_flag` to remember the state of the once
+    ```cpp
+    class X {
+    private:
+      connection_info connection_details;
+      connection_handle connection;
+      std::once_flag connection_init_flag;
+      void open_connection () {
+        // expensive operation
+        connection = connection_manager.open(connection_details);
+      }
+    public:
+      X(connection_info const& connection_details_) :
+        connection_details{connection_details_} {}
+      
+      void send_data(data_packet const& data)
+      {
+        std::call_once(connection_init_flag, &X::open_connection, this);
+        connection.send_data(data);
+      }
+      data_packet receive_data()
+      {
+        std::call_once(connection_init_flag, &X::open_connection, this);
+        return connection.receive_data();
+      }
+    }
+    ```
+    * `std::call_once` makes sure that the expensive initialization is only called once.
+
+#### Protecting rarely updated data structure (Read-Writer)
+
+Problem: There are data strucutes that are rarely updated by writers (exclusive access) and access a lot by readers (no writers)
+
+`shared_mutex`:
+* Allow for easy reader and writer synchronization
+* Readers: Use `std::shared_lock<std::shared_mutex>` to obtain shared access.
+* Writer: Use normal `std::lock_guard` or `std::unique_lock`
+* If a thread has a shared lock then any thread trying to get exclusive access (`std::lock_guard`) will be blocked and vice versa
+
+#### Recursive Lock
+
+* Allow for multiple locking of the same mutex.
+* Must release all locks of the same mutex before other threads can lock it.
+* Is a code smell but could be useful when all public methods need to acquire lock and some public method need to call another public method.
