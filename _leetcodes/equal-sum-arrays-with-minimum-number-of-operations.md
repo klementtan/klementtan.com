@@ -1,6 +1,6 @@
 ---
 title: "1775: Equal Sum Arrays With Minimum Number of Operations"
-excerpt: Best Time to Buy and Sell Stock with Cooldown
+excerpt: Equal Sum Arrays With Minimum Number of Operations
 problem_id: 1175 
 categories:
   - Leet Code

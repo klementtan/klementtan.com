@@ -190,7 +190,7 @@ two processors
 
 1. Doorway Step: Each process that requests critical section will receive a number
 
-* The number will be later the request, the higher the number
+* The later the request, the higher the number
 
 2. All process will check that all other process has completed the doorway step
 3. The process with the smallest number will be allowed into the critical section
@@ -218,9 +218,9 @@ class Bakery implements Lock {
       if (number[j] > number[i]) {
         number[i] = number[j];
       }
-      number[i]++;
-      choosing[i] = false;
     }
+    number[i]++;
+    choosing[i] = false;
 
     for (int j = 0; j < N; j++) {
       while( choosing[j] );
@@ -653,7 +653,29 @@ synchronized (queue) {
 Reader r = new Reader(myname);
 synchronized (queue) {
 
-  if ((numWriter > 0) || )
+  if ((numWriter > 0) || !queue.isEmpty()) {
+    r.OkToGo = false;
+    queue.add(r);
+  } else {
+    r.OkToGo = true;
+    numRead++;
+  }
+}
+syschronized (r) {if (!r.okToGo) r.wait();}
+
+synchronized (queue) {
+  numReader--;
+  if (numReader > 0) exit();
+  if (!queue.isEmpty()) {
+    // remove single writer or a batch of readers from queue
+    for each request removed do {
+      numWriter++ or numReader++;
+      synchronized (request) {
+        request.okToGo = true;
+        request.notify();
+      }
+    }
+  }
 }
 ```
 
