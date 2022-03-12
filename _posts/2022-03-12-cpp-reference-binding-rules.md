@@ -20,7 +20,7 @@ page on C++ reference very useful in helping me understand the binding rules.
 Rule: `const` and non-`const` arguments can be bind to `const` ref parameters but
 `const` arguments cannot bind to non-`const` parameters.
 
-My reasoning: This makes sense as converting object to `const` on the callee side will not
+My reasoning: This makes sense as converting an object to `const` on the callee side will not
 change anything on the caller side even if the object is non-`const`. However,
 the converse will not be true as converting a `const` object on the caller side
 to non-`const` object on the callee side can allow the callee to modify the object
@@ -47,10 +47,10 @@ int main() {
 
 Rule:`lvalue` arguments cannot bind to `const` and non-`const` `rvalue` parameters.
 
-Explanation: As rvalue parameters indicates that the object is temporary and can
+Explanation: As rvalue parameters indicate that the object is temporary and can
 be moved away, allowing `lvalue` to bind to `rvalue` will be catastrophic as the
-callee can move away the caller's object. Even though, `const` `rvalue` ref does
-not make sense it will actually acts like a `const` `lvalue` ref and I am not 
+callee can move the caller's object. Even though, `const` `rvalue` ref does
+not make sense it actually acts like a `const` `lvalue` ref and I am not 
 sure why the standard does not allow it.
 
 Example:
@@ -98,7 +98,7 @@ bind to `const` `lvalue` parameters.
 
 Explanation: `const` `lvalue` indicates that the callee wants
 a read-only view of the object and it does not matter what type
-of object that the caller pass as the argument. Thus, the standard
+of object the caller pass as the argument. Thus, the standard
 allows all types of arguments to bind to `const` `lvalue`.
 (klement: But why does this not apply for `const` `rvalue` parameters?)
 
