@@ -518,8 +518,8 @@ T parallel_accumulate(Iterator first, Iterator last, T init) {
 
 **Protecting shared data during initialization**
 * Static variable initialization:
-  * Pre C++11: static variable are initialized the first time control (imperative code order) flow passes through its declaration. Multiple thread may believe that they are the first causing multiple concurrent initialization of the same varaible.
-* Lazy initialization of a singleton class (DB connection`)
+  * Pre C++11: static variable are initialized the first time control (imperative code order) flow passes through its declaration. Multiple thread may believe that they are the first causing multiple concurrent initialization of the same variable.
+* Lazy initialization of a singleton class (DB connection)
   * Requires checking if the shared data is initialized, then initializing it if it is not present
 * Solutions:
   * Locking before the initiliazation check, unlocking after the initializaiton 
@@ -574,3 +574,129 @@ Problem: There are data strucutes that are rarely updated by writers (exclusive 
 * Allow for multiple locking of the same mutex.
 * Must release all locks of the same mutex before other threads can lock it.
 * Is a code smell but could be useful when all public methods need to acquire lock and some public method need to call another public method.
+
+## Chapter 4: Synchronizing concurrent operations
+
+### Waiting for an event or condition
+
+Problem: thread A needs to wait for some condition to be true where that condition can be set to
+true by thread B
+
+Bad Solutions:
+1. Busy waiting:
+  * thread A continuously checks if the condition changes to true
+  * As the condition is shared condition between thread A and B, will most probably need
+  a mutex to make sure there is no data race between read and writing to the condition
+  * Problems:
+    * Thread A could hold on to the lock indefinitely. Thread A holds the mutex -> continuously checks
+    that the condition is false -> threads B wants to set condition to true -> lock the already locked
+    mutex -> dead lock
+    * Resource intensive: thread A will use take CPU resource from thread B when continuously checking the lock
+2. Busy waiting with wait:
+  * Thread A locks the mutex, if the condition fail, unlock the lock then sleep for X amount time. Repeat.
+    ```cpp
+    bool flag;
+    std::mutex m;
+    void wait_for_flag()
+    {
+      std::unique_lock<std::mutex> lk(m);
+      while(!flag)
+      {
+        lk.unlock();
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        lk.lock();
+      }
+    }
+    ```
+  * This solution will remove the problem of deadlock (lock released when sleeping)
+  * Problem: hard to determine a good sleeping period.
+
+#### Waiting for a condition with a condition variable
+
+Types of condition variable
+* `std::condition_variable`: condition variable that only uses `std::mutex`
+* `std::condition_variable_any`: condition variable that uses any `mutex`-like
+  * Additional overhead of size, performance and OS resource (prefer `std::condition_variable` for lower overhead)
+
+
+Condition variable thread synchronization:
+Problem: a thread will produce items into a queue and another thread will consume items from the queue
+
+```cpp
+std::mutex mut;
+std::queue<data_chunk> data_queue;
+std::condition_variable data_cond;
+
+// Producer thread
+void data_preparation_thread()
+{
+  while(more_data_to_prepare()) {
+    data_chunk const data = prepare_data();
+    {
+      std::lock_guard<std::mutex> lk(mut);
+      data_queue.push(data);
+    }
+    data_cond.notify_one();
+  }
+}
+
+// Consumer thread
+void data_processing_thread()
+{
+  while(true)
+  {
+    std::unique_lock<std::mutex> lk(mut);
+    data_cond.wait(lk, []{return !data_queue.empty();});
+    data_chunk data = data_queue.front();
+    data_queue.pop();
+    lk.unlock();
+    process(data);
+    if (is_last_chunk(data))
+      break;
+  }
+}
+```
+
+* Shared data:
+  * `data_queue`: object to produce and consume on
+  * `mut`: producer and consumer share a mutex to protect access to the queue
+  * `data_cond`: condition variable that is shared with producer and consumer to synchronize
+  code
+* Producer:
+  * Tries to lock the mutex to gain exclusive access to queue
+  * Append a new item to the queue
+  * Release lock (unblock any other producer waiting on the lock)
+  * `notify()` condition variable: signal to consumer that there is an item to consume from the queue.
+* Consumer:
+  * Create a `std::unique_lock<std:mutex>`: unique lock does not lock the mutex immediately
+  * `wait(...)` on the condition variable:
+    * If another thread `notify` the condition variable, the consumer will unblock with the mutex being **locked**.
+    * Check if the lambda (predicate) returns true
+      * If predicate false:
+        * Release the mutex and blocks until another producer calls `notify`.
+      * If predicate true:
+        * Continue holding the mutex and return from `wait(...)`
+  * Need `unique_lock` as it must be able to lock and unlock the mutex without destroying the lock
+
+Cavaets (Spurious Wake):
+* Even though the thread calling the `notify` might view as the condition as true, when the `wait`-ed thread 
+unblocks the condition might not be true anymore.
+* Due to condition variable being [non-hoare style monitor](https://klementtan.com/readings/concurrent-and-distributed-in-java/#hoare-monitor):
+other threads might modify condition between `notify` and the `wait`-ed thread acquiring the lock
+* Might result in multiple (indeterminate) number of calls to the predicate
+* Mitigated with the predicate arguments.
+
+Condition Variable: `wait(...)` will return immediately with the mutex locked if
+and only if the condition return true.
+
+Sample condition variable implementation
+
+```cpp
+template<typename Predicate>
+void minimal_wait(std::unique_lock<std::mutex>& lk, Predicate pred) {
+  while(!pred()) {
+    lk.unlock();
+    lk.lock();
+  }
+}
+```
