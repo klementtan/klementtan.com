@@ -325,7 +325,7 @@ T parallel_accumulate(Iterator first, Iterator last, T init) {
 * Useful if the main thread needs to perform similar but slightly separate work.
 * Defaults to `std::thread::id`
 
-## Sharing data between threads
+## Chapter 3: Sharing data between threads
 
 ### Problems with sharing threads
 
@@ -577,6 +577,18 @@ Problem: There are data strucutes that are rarely updated by writers (exclusive 
 
 ## Chapter 4: Synchronizing concurrent operations
 
+**Futures** summary:
+* `std::future`:
+  * Represents a future result that might not be available now.
+  * Threads can block on the future until the result is available.
+  * Must have an opposite end that provides the future result
+* Opposite ends of a future:
+  * `std::async`: a function that is invoked in a separate thread (depending on policy)
+  and the return result is the future result
+  * `std::package_task`: a packaged function object can be invoked in the future explicitly
+  . The return result is also the future result
+  * `std::promise`: an object that can set the future's result with `set_value()`
+
 ### Waiting for an event or condition
 
 Problem: thread A needs to wait for some condition to be true where that condition can be set to
@@ -700,3 +712,349 @@ void minimal_wait(std::unique_lock<std::mutex>& lk, Predicate pred) {
   }
 }
 ```
+
+**Building a thread-safe queue with condition variable**
+
+Queue works well with condition variable as the condition for popping from the queue
+is when the queue is not empty.
+
+```cpp
+#include <memory>
+#include <queue>
+#include <mutex>
+#include <condition_variable>
+
+template<typename T>
+class threadsafe_queu
+{
+  private:
+    mutable std::mutex mutex;
+    std::queue<T> data_queue;
+    std::condition_variable data_cond;
+  public:
+    threadsafe_queue() {}
+    threadsafe_queue(threadsafe_queue const& other)
+    {
+      std::lock_guard<std::mutex>lk (other.mut);
+      data_queue = other.data_queue;
+    }
+
+    void push(T new_value)
+    {
+      std::lock_guard<std::mutex> lk(mut);
+      data_queue.push(new_value);
+      data_cond.notify_one();
+    }
+
+    void wait_and_pop(T& value)
+    {
+      std::unique_lock<std::mutex> lk(mut);
+      data_cond.wait(lk, [this]{return !data_queue.empty();});
+      value = data_cond.front();
+      data_queue.pop();
+    }
+    std::shared_ptr<T> wait_and_pop()
+    {
+      std::unique_lock<std::mutex> lk(mut);
+      data_cond.wait(lk, [this]{return !data_queue.empty()});
+      std::shared_ptr<T> res(std::make_shared<T>(data_queue.front()));
+      data_queue.pop();
+      return res;
+    }
+    std::shared_ptr<T> try_pop()
+    {
+      std::lock_guard<std::mutex> lk(mut);
+      if (!data_queue.empty())
+        return std::shared_ptr<T>();
+      std::shared_ptr<T> res(std::make_shared<T>(data_queue.front()));
+      data_queue.pop();
+      return res;
+    }
+
+    std::shared_ptr<T> try_pop(T& value)
+    {
+      std::lock_guard<std::mutex> lk(mut);
+      if (!data_queue.empty())
+        return false;
+      value = data_queue.front();
+      data_queue.pop();
+      return true;
+    }
+    bool empty() const
+    {
+      std::lock_guard,std::mutex> lk(mut);
+      return data_queue.empty();
+    }
+}
+```
+* Use condition variable that represents if the queue is not empty.
+  * If the `notify()` is called when no thread consuming, the consuming thread will
+  lock the mutex later and check that the queue is not empty and exit the condition variable immediately
+  - no deadlock.
+* Lock mutex when copy constructing or checking empty queue
+  * Other threads can modify during these read operation 
+* `mutex` is `mutable` - all read operation (`const` context) require a locking the mutex
+
+### Waiting for one-off events with futures
+
+**Future**: a thread can obtain the result of a one-off event with `std::future`.
+* Thread can periodically wait for the future
+* Perform another task and when the result of the future is needed, wait until it is ready
+* Similar to threads `std::future` will copy lvalue and move rvalue arguments.
+  * For member functions, first arguments will be the function pointer (ie: `&X:;foo`) and the second argument
+  is the instance. If a reference to the instance is used(`&x` or `std::ref(x)`) then the 
+  member function of that instance will be called else it will be copied into a temp variable and called on the
+  temp
+
+Types of futures:
+1. Unique future (`std::future<>`): one and only instance of the associated event and result
+2. Shared future (`std::shared_future<>`): multiple instances of the future may refer to the same event. All the instances will become
+ready at the same time
+
+Execution Policy:
+1. `std::launch::deferred`: deferred until `wait()` is called.
+2. `std::launch::async`: launch and execute on a new thread.
+3. `std::launch::async | std::launch::deferred`: let the implementation decide to
+be deferred or new thread (default)
+
+#### Associating a task with future
+
+Problem: `std::async` does not allow for the task to be executed later programmitically 
+
+`std::package_task<>`:
+* Links a future (future result) with a callable object.
+* Allows the callable object to be invoked independently (different thread / code) 
+and the result of the callable object be returned at a different thread or code.
+* Useful for packaging tasks for thread pool to invoke. The thread pool does not need
+to care about the return value
+* Getting future: `std::package_task<>::get_future` returns the future object for the callable
+object. If the callable object is invoked the future will be ready and the results can be returned
+* Takes a callable function template argument:
+  * return value of the template argument determines the type of future
+
+Example: passing tasks between background task and gui thread
+
+```cpp
+void guid_thread()
+{
+  while(!gui_shutdown_mesage_received()) {
+    get_and_process_guid_message();
+    std::package_task<void()> task;
+    {
+      std::lock_guard<std::mutex> lk(m); // lock the queue that passes package_task between threads
+      if(tasks.empty())
+        conitnue
+      task = std::move(tasks.front()); // get package task from independent context
+      tasks.pop_front();
+    }
+    task(); // call package task
+  }
+}
+
+template<typename Func>
+std::future<void> post_task_for_gui_thread(Func f)
+{
+  std::packaged_task<void()> task(f); // create a package task from the func
+  std::future,void> res = task.get_future(); // get the future for the result
+  std::lock_guard<std::mutex> lk(m); // lock the queue to pass packaged_task
+  tasks.push_back(std::mvoe(task)); // add the task to the queue
+  return res;
+}
+```
+
+#### Making `(std::)promise`
+
+Problem: `std::async` and `std::packaged_task` sets the result for a value through the return value of a callable function.
+This makes it hard for a thread to provide results for multiple different futures at the same time.
+
+Solution: `std::promise` allows a thread to set the result of a future with a single operation.
+Allow for multiple future's result to be easily set.
+
+**Multiple network connection problem**:
+* An application have multiple network connection that needs to receive and send packets.
+* Having a `std::async` for each connection, where the task will return data packets to the future
+only when the it received or send data to or from the connection.
+  * This is not scalable as the number of threads > number of processing units will have adverse impact on the latency
+* Example implementation:
+  ```cpp
+  #include <future>
+  void process_connections(connection_set& connection)
+  {
+    while(!done(connections)) {
+      for (connection_iterator connection = connections.begin(); connection_iterator != connections.end(); ++connection_iterator) {
+        if (connection->has_incoming_data())
+        {
+          data_packet data = connection->incoming();
+          std::promise<payload_type>& p = connection->get_promise(data.id);
+          p.set_value(data.payload);
+        }
+        if (connection->has_outgoing_data())
+        {
+          outgoing_packet data = connection->top_of_outgoing_queue();
+          connection->send(data.payload())
+          data.promise.set_value(true);
+        }
+
+      }
+    }
+  }
+  ```
+  * Each incoming data must have an associated promise for the connection manager to set the result
+  for the future of the incoming data.
+  * Each outgoing data must have an associated promise for the connection manager to set the success result
+  for the future of the outgoing data.
+
+#### Saving an exception for the future
+
+* For `std::async` and `std::packaged_task`, if the called function throws an exception, the thread owning the
+corresponding `std::future` will re-throw the exception when `.get()` (not immediately when the exception is thrown from the called function)
+is called.
+* For `std::packaged_task` and `std::promise`, if the packaged task is not called or the promise value is not set
+upon destruction, `.get()` will throw `std::futrue_error`. Creating a promise or package task guarantees that the future
+will be set eventually and destructing it means it cannot no longer be set.
+
+#### Waiting from multiple threads
+
+**Note**: `std::future` helps to synchronize data transfer from a thread to another but accessing the future object
+is not thread safe and more than one thread should not have the same reference to the same future. However, `std::future`
+is a move only type and cannot be copied across multiple threads.
+
+Solution: use `std::shared_future` instead to allow multiple threads to have access to a single future result.
+* Can be constructed with rvalue `std::future`  or `std::future::get()` that allows for `auto`
+
+Cavaets:
+* `std::shared_future` should be copied across threads instead of pass by reference. This will prevent concurrent calls to the
+member functions of the same instance.
+* Make sure that each `std::shared_future` is a local object
+
+
+```cpp
+std::shared_future<int> sf;
+
+void run() {
+  auto local_sf = sf; // copy the shared_future 
+  local_sf.wait();
+}
+```
+
+### Using synchronization of operations to simplify code
+
+#### Functional programming with futures
+
+Reasons:
+* Having pure function that doesn't depend or change external state is very useful
+in making sure that concurrent code does not have dependency or race condition.
+
+Parallel Quick Sort:
+```cpp
+template<typename T>
+std::list<T> parallel_quick_sort(std::list<T> input)
+{
+  if(input.empty())
+    return;
+
+  std::list<T> result;
+  result.splice(result.begin(), input, input.begin()); // the first value from input into result (pivot)
+  T const& pivot = *result.begin();
+
+  auto divide_piont = std::partition(input.begin(), input.end(), [&](T const& t){ return t < pivot; });
+
+  std::list<T> lower_part;
+  lower_part.splice(lower_part.end(), input, intput.begin(), divide_point); // move the values less than input into it
+
+  std::future<std::list<T>> new_lower(std::async(&parallel_quick_sort<T>, std::move(lower_part))); // execute sort lower in new thread
+
+  auto new_higher = parallel_quick_sort(std::move(input)); // input only left with higer
+
+  result.splice(result.end(), new_higher); // move higer after the pivot element
+  result.splice(result.begin(), new_lower.get()); // move lower to before the pivot element
+  return result;
+}
+```
+* One of the two recursive call will be make to a new thread (up to implementation to decide if new thread or defrred)
+* Pure functional approach as each function takes the list by value and does not modify any global state
+
+Spawning a new generic task in a thread (substitute for `std::async`)
+```cpp
+template<typename F, typename A>
+std::future<std::result_of<F(A&&)>::type> spawn_task(F&& f, A&& a)
+{
+  typedef std::result_of<F(A&&)>::type result_type;
+
+  std::packaged_task<result_type(A&&)> task(std::move(f)); // package function in task
+
+  std::future<result_type> res (res.get_future()); // get the future that represent the future return value of the task
+
+  std::thread t(std::move(task), std::move(a)); // Create a thread that executes the task
+
+  t.detach(); // Allow the thread to run free with the task
+
+  return res;
+}
+```
+
+#### Synchronization operations with message passing
+
+Utilises **Actor** model where each thread are discrete actors that have independent state (no race condition)
+and updates the state based on the message sent and received.
+
+Implementing a state machine
+
+```cpp
+struct card_inserted
+{
+  std::string account;
+}
+class atm
+{
+  messaging::receiver incoming;
+  messaging::sender bank;
+  messaging::sender interface_hardware;
+  void (atm::*state)(); // state is represented by a function pointer that will be updated once a state is completed
+  std::string account;
+  std::string pin;
+  void waiting_for_card()
+  {
+    interface_hardware.send(display_enter_card());
+    incoming.wait()
+      .handle<card_inserted>(
+        [&] (card_inserted const& msg)
+        {
+          account = msg.account;
+          pin = "";
+          interface_hardware.send(display_enter_card());
+          state = &atm::getting_pin; // updates 
+        }
+          )
+      .handle<...> // allow for chaining of different handlers
+  }
+
+public:
+  void run()
+  {
+    state = &atm::waiting_for_card; // set the initial state
+    try
+    {
+      for (;;)
+      {
+        (this->*state)(); // keep calling the states
+      }
+    }
+  }
+}
+```
+
+#### Continuation-style concurrency with the Concurrency TS
+
+Under the namespace `std::experimental::future`, you can chain futures. This will result in only the last future
+being valid.
+```
+std::experimental::future<int> find_the_answer(){...};
+find_the_answer().then(find_the_question);
+```
+* The `.then` takes a callable objects that takes `std::experimental::future<T>` as an argument.
+Where `T` is the return type of the initial future.
+
+`std::async` currently does not return `std::experimental::future` but you can wrap it in experimental future to utilise 
+continuation.
+
