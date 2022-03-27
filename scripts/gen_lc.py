@@ -34,6 +34,8 @@ def create_md(question):
         "{CONTENT}": question["content"],
     }
     for k in replaces:
+        if replaces[k] is None:
+            replaces[k] = ''
         md = md.replace(k, replaces[k])
     return md
 

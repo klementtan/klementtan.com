@@ -1058,3 +1058,311 @@ Where `T` is the return type of the initial future.
 `std::async` currently does not return `std::experimental::future` but you can wrap it in experimental future to utilise 
 continuation.
 
+Chaining (not in C++23):
+* As `.then` returns `std::experimental::future<T>`, it can be continuously chained
+* If the continuation function in `.then(f)` returns a `std::experimental::future`,
+the compiler will automatically unwrap the future and pass `std::experimental::future`
+to the next function instead of `std::experimental::future<std::experimental::future>`
+* `std::experimental::shared_future`
+  * `std::experimental::shared_future<T>` can be chained as well. The continuation will
+  be invoked for all reference to the same `shared_future`
+  * The return for `.then` is a `std::experimental::future` unless it is called with `.then`
+
+When all (not in C++23):
+* Use `std::experimental::when_all` to wait for a container of futures to all be finished.
+
+When any (not in C++23):
+* Use `std::experimental::when_any`
+
+**Latches and Barriers** (in C++20):
+* `std::latch`
+  * Initialize with a positive integer. Threads can either `count_down` the value of the latch
+  or `wait` on the value to become `0`
+* `std::barrier`
+  * Initialize with the number of threads in a group
+  * Each thread will call `std::barrier::arrive_and_wait` to be blocked at the barrier until all threads in the group
+  has reached the barrier.
+  * Can be reused multiple times.
+* `std::flex_barrier`
+  * Similar to `std::barrier` but accepts a lambda function that will be called on one thread once all the
+  threads will reached the barrier.
+  * Allow for execution of one sequential code
+  * The return value of the lambda will update the number of threads in the group for the next cycle.
+
+## Chapter 5: The C++ memory model and operations on atomic types
+
+### Memory Model
+
+#### Structural
+
+*Structural memory model definition*: how things are laid out in memory
+
+**Objects and Memory location**:
+* All data in C++ are **objects**
+  * Different from java or ruby where all types have member functions.
+  * Objects are "a region of storage" that
+* Each object is stored in one or more **memory location**
+* Each memory location is either:
+  * an object (or sub-object) of a scalar type
+  * a sequence of bit field. Multiple adjacent bit fields are multiple objects
+  that are located in the same memory location
+    * Zero length bit field do not exists in a bit field but can separate adjacent
+    bit fields into separate location.
+* Struct
+  * is an object that contains multiple sub-objects (data members)
+* Take aways
+    1. Every variable is an object (including members)
+    2. Every object occupies at least one memory location.
+    3. Variable of fundamental type (ie `int`, `char`) occupy
+    exactly **one** memory location even if they are adjacent or
+    part of an array
+        * (klement: what about `uint64_t`?)
+    4. Adjacent bit fields are part of the same memory location.
+
+#### Concurrency
+
+Concurrency Memory model:
+1. If two threads access **separate** memory location then **no problem**
+2. If two thread access the **same** memory location:
+    * And neither threads update the memory location then **no problem**
+    * And both threads update the memory location then **UB**
+
+UB from concurrent modification:
+* Occurs when there is not enforced ordering between two access.
+* Using *atomic operation* has enforced ordering between access but
+it does not enforce which operation happens first.
+
+#### Modification orders
+
+*Modification order* definition: the ordering of all modification to an object
+from all threads.
+
+Defined Behaviour
+* To achieve defined behaviour, all threads must agree on the same modification
+order in an execution.
+  * Allowed to have different modification across different execution but within each
+  execution, the modification order must be the same.
+* If the object isn't atomic, you have to make sure that all threads agree on the same
+order else the responsibility is on the compiler.
+
+Results of agreed modification order:
+* Once a thread seen a particular entry in the modification order, all subsequent reads
+must return later values
+* Additionally, subsequent writes from that thread must occur later in the modification order (cannot go back in time)
+* Read of an object after a write on the same thread (WR order enforced?) must either return
+the value written or another value later in the modification order.
+    * Cannot read data before the write.
+
+Note: the relative order between separate objects does not need to be enforced.
+  
+### Atomic Operations and types in C++
+
+*Atomic operation definition*: you (any other threads) cannot observe such an
+operation half-done from any thread in the system. It is either done or not
+done.
+* Non atomic operation could be seen as half-done, only a portion of the data
+members are updated.
+
+**Standard Atomic Types**:
+* All operations are atomic
+  * Could be implemented using machine instructions or locks
+* Provides `is_lock_free()` member function that determines if it is lock free
+  * Only `std::atomic_flag` does not provide this function as it **required** to be always
+  lock free.
+* In C++17 provides `static constexpr` `is_always_lock_free` to check if it is always
+lock free for all architectures
+* Provides macros `ATOMIC_{...}_LOCK_FREE` that returns `0` if it is **never** lock free
+* `std::atomic<>` specialisation may not be lock-free for builtin types (expected but not required)
+* On old compilers `std::atomic<>` and corresponding atomic type (`atomic_llong`) might represent
+different data - in C++17 onwards atomic type are alias for the specialisation.
+* Copy behaviour
+  * Do no support copying or assigning operation (ie `atomic -> atomic`) but provides assignment or
+  copying from implicit type to atomic
+  * Copying and assigning involves two objects and there is not way to make the operations on two
+  objects atomic.
+* All `std::atomic` (including custom user defined) types provides `load()`, `store()`, `compare_exchange_strong()`,
+`compare_exchange_weak()`, `fetch_add()`, `fetch_or()`, ...
+* All operations on atomics can be classified into the following types:
+  * Store operations: store data into the object
+  * Load operations: load data from the object
+  * Read-modify-write operations: read and then modify the data of an object
+
+`std::atomic_flag`:
+* Simple object that provides:
+  * `set`: set the flag to `1`
+  * `clear`: set the flag to `0`
+  * `test_and_set`: set the flag to `1` and return the previous value
+    * Note: the testing and setting are atomic operations, no two threads can call `test_and_set`
+    and both return `0`
+* Building block for other atomic types
+* Spin Lock:
+  ```cpp
+  class spinlock_mutex
+  {
+    std::atomic_flag flag;
+  public:
+    spinlock_mutex():
+      flag{ATOMIC_FLAG_INIT}
+      {}
+    void lock()
+    {
+      while(flag.test_and_set(std::memory_order_acquire)) // only one thread can return 0
+    }
+    void unlock
+    {
+      flag.clear(std::memory_order_release);
+    }
+  }
+  ```
+
+`std::atomic<bool>`
+* Can be assigned to the non-atomic variant (ie `bool`)
+* Assignment operations return value instead of the usual `ref`
+* Has `exchange(T, order)` member function that sets the underlying atomic object to the argument
+and return the previous value of the atomic before it was set.
+
+`std::atomic<T*>`
+* Additionally allow for pointer arithmetic
+  * `++ | fetch_add(1), += | fetch_add(n)`
+  * `-- | fetch_sub(1), -= | fetch_sub(n)`
+* Need to use `fetch_add,sub` if you would like to use memory order semantics
+
+`std::atomic<integral type>`
+* allows for all normal integral type operation except for multiplication division and shift operation missing.
+
+`std::atomic<>` primary class template
+* Requirements:
+  * Trivial copy assignment operator
+    * Must not have any virtual functions or virtual base class
+    * Compiler generated copy-assignment operator
+    * Every base class and non-static data members needs to be trivially copy-assignment
+    * *Implication*: compiler can just perform `memcopy`
+  * Bitwise comparison
+    * Equal instances should be bitwise same
+      * Cannot be `std::vector` as equal vector contains different pointers.
+      * But can use class with counters, flags or array
+    * Cannot have padding bits
+    * Cannot have custom comparison operator
+    * *Implication*: compiler can use `memcmp`
+* Reasons:
+  * If the compiler need to use locks, the pointer or reference to protected
+  should not be passed to any protected data
+    * Having a custom copy-assignment or comparator could violate this rule
+  * Allowing user to execute arbitrary code in the copy assignment or comparison
+  could lead to deadlock.
+  * The restriction increase the change for the compiler to use atomic instructions
+  instead of lock
+* If the user type is same size as `int` or `void*`, most probably can be lock free.
+  * Some platforms can perform atomic instructions for sizes twice of `int` or `void*`
+  (Double-word-compare-and-swap)
+* Best Practice: should only use `std::atomic<>` for simple user defined type
+
+Free functions for atomic operations:
+* Provides corresponding non-member functions for atomic types
+  * Takes `T*` instead of `T&` as argument to be C-compatible
+* `std::shared_ptr`
+  * Provides `load`, `store`, `exchange` and `compare-exchange` overloads for `std::shared_ptr`
+  eventhough it is not a specialisation of `std::atomic`
+
+#### Storing a new value depending on the current value
+
+(klement: IMO this segment is very confusing to me but it seems important for later chapters
+on lock-free programming)
+
+*Compare and Exchange functional requirements*:
+1. Compares the expected value argument with the atomic value
+2. If the expected value is **equal** to the atomic value:
+  1. Signifies that atomic value **did not change** from the POV of the setting thread,
+  it is safe for the thread to update the atomic value with the desired value.
+  2. Returns `true`
+  3. Note: Store performed
+3. If the expected value is **not equal** to the atomic value:
+  1. Signifies that the atomic value **changed** from when the setting thread decide on
+  the desired value to when the thread actually sets it
+  2. Updates the expected value argument to the change atomic value
+  3. Returns `false`
+  4. Note: No store performed
+  
+`compare_exchange_strong(T& expected, T desired, ...)`
+* Carries out the full functionallity of compare and exchange.
+
+`compare_exchange_weak(T& expected, T desired, ...)`
+* If the expected value equals to atomic value, might not successfully store the desired value
+  * Functionally should always have successful store when atomic value == expected
+  * Returns `false` (eventhough atomic value == expected)
+  * False negative - spurious failure
+    * Should try again
+  * Spurious failure happens when the machine cannot atomically compare atomic value == expected
+  and set the atomic value to desired.
+* Solution keep looping when spurious failure. Occurs when expected is not
+changed and `compare_exchange_weak` returns false.
+  ```cpp
+  bool expected = false;
+  extern atomic<bool> b; // initialize to true
+  while(!b.compare_exchange_weak(expected, true) && !expected) 
+  ```
+
+Using compare and exchange to perform dependent updates (klement: my own example - not 100% is correct)
+```cpp
+extern atomic<Foo> g_f;
+void fn() {
+  Foo prev_f = g_f.load();
+  Foo new_f;
+  do {
+    // upated g_f will be loaded into prev_f
+    new_f = some_dependent_update(prev_f);
+  } while(!g_f.compare_exchange_strong(prev_f, new_f));
+}
+```
+* Each failed `compare_exchange_strong` (another thread updated `g_f`), reload `prev_f` with the upated
+`g_f`
+* Re-compute desired (`new_f`) that is dependent on the current `g_f`
+* Try to update `g_f` and hope no other thread will update `g_f`
+* If it is cheap to perform `some_dependent_update` the value,
+should use `compare_exchange_weak` as it more lightweight as we need to
+perform the loop anyways?
+* (klement: this does not seem to prevent starvation?)
+
+*Memory Order*:
+* the third argument is the memory order in the case of success and forth is in the case of failure
+* Success performs read-modify-write operations while failed only perform read
+* Failure memory order cannot be stricter than success.
+
+### Synchronizing operations and enforcing ordering
+
+#### Relationships
+
+*synchronizes-with*:
+* Only occurs between atomic types or types that atomic data members
+* Rule:
+  * A read operation synchronizes with a write operation, `W`, if it:
+    1. reads the value written by `W`
+    2. reads the value written by write operations after `W` on the **same thread** as `W`
+    3. reads the value written by read-modify-write operation that depends on the `W` value on **any thread**
+* Occurs for suitably tagged read and write operations
+* Saying operation `A` on a thread synchronizes with operation `B` on another thread is equivalent to `A` leads transitively to `B`
+
+*sequence-before*:
+* The program order within the same function/thread
+* (klement: The book did not touch on sequence-before relationship but these articles were
+useful in my understanding [SO](https://stackoverflow.com/a/4183735/11635160))
+
+*happens-before*
+* On a single thread: if an operation is sequence-before another thread then there is a *happen-before* relationship
+  * (klement: no *happen-before* relationship between different atomic variable on the same thread?)
+* On multi thread: If an operation on thread A *synchronizes-with* operation on thread B, then A inter thread happens before B
+  * **Inter thread happens before** occurs transitively across other happens before and other sequence before 
+* Requirements:
+  * A sequenced before B
+  * A inter-thread happens before B (transitive)
+    * A and B can operate on different objects
+
+*strong-happens-before*
+* Requirements:
+  * A sequenced before B
+  * A synchronizes-with B (not transitive)
+    * A and B must operate on the same object
+  * Transitive through *strong-happens-before*
+* Operation with `memory_order_consume` will participate in *happens-before* but
+not *strong-happens-before*
+
