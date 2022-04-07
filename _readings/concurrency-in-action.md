@@ -1366,3 +1366,58 @@ useful in my understanding [SO](https://stackoverflow.com/a/4183735/11635160))
 * Operation with `memory_order_consume` will participate in *happens-before* but
 not *strong-happens-before*
 
+#### Memory ordering for atomic operations
+
+##### Sequentially Consistent Ordering
+* Operations as if performed on a single thread
+* A sequentially consistent store synchronizes with a sequentially consistent load of the same variable. 
+  * If thread A stores 1 and threads B loads 1 then they synchronize
+* Condition carry forward: Sequential consistency also applies to all sequentially consistent after the load
+  * Continuing from the previous example, if X occur after thread B loads 1 then X must also occur after thread A stores 1
+* Condition does not carry forward to threads that use relaxed memory model
+* Maintains ordering between different variable through sequenced before
+  * thread A writes `x=1`, thread A writes `y=1`, thread B reads `y=1`, thread B must read `x=1`
+* Cost:
+  * Can incur huge overhead as the OS needs to synchronize all atomic operations
+
+#### Non-Sequential Ordering
+* Different threads have different view of all the operations on all the atomic variables
+  * Due to the CPU cache having inconsistent data
+* Only guarantee: all threads will view the **same modification order** for within the **same variable**
+  * Ie `x=1` -> `x=2`, if `x.load() == 2` then `x.load()` will never equals to `1` afterwards
+
+**Relaxed Ordering**:
+* No synchronize with relationship between different threads and different variable
+  ```cpp
+  void write_x_then_y()
+  {
+    x.store(true, std::memory_order_relaxed);
+    y.store(true, std::memory_order_relaxed);
+  }
+  void read_y_then_x()
+  {
+    while(!y.load(std::memory_order_relaxed));
+    if(x.load(std::memory_order_relaxed));
+      ++z
+  }
+  int main()
+  {
+    std::thread a(write_x_then_y)
+    std::thread b(read_y_then_x)
+    a.join();
+    b.join();
+    assert(z.load() != 0);
+  }
+  ```
+  * Could read `z=1` as `x=1` happen before `y=1` does not need to hold
+* Within the same thread and same atomic variable still have **happen-before** relationship
+* Threads agree on the **same modification order of each individual variable**
+  * If a thread sees a certain value, it cannot read any earlier value.
+* Intuition:
+  * Each atomic variable will have its own change list of values starting with the first value
+  * Each thread will have its own pointer to where it is at on the change list
+  * At $$T_i$$ if you load $$v_i$$, at $$T_{i+1}$$ you can get $$v_{>=i}$$ either the same value
+  as before or a new value but never a old value
+    * Another thread might load another value from $$v_i$$ at $$T_i$$
+  * When trying to store the value, the value will be added to the end of the change list but
+  the pointer might still remain at the same position.

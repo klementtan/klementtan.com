@@ -84,9 +84,9 @@ memory for each segment is disjoint into frames
 
 ### Virtual Memory
 
-**Problem**: An issue arise when the number of process that pages wants exceeds the number of frames.
+**Problem**: An issue arise when the number of pages that process wants exceeds the number of frames.
 
-**Solution**: 
+**Solution**:
 * To solve this OS will utilize the secondary storage (disk) to store frames that are
 LFU/LRU.
 * Each entry on the page table will have a **is memory resident** bit. If `1` the corresponding

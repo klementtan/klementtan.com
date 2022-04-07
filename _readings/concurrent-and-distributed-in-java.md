@@ -689,12 +689,14 @@ synchronized (queue) {
 through *concurrent objects*
 
 **Concurrent Object**:
+
 * Has a *name*
 * Has a *type*:
   * defines the set of possible values for the object
   * defines the set of primitive *operations* to manipulate the object
 
 **Execution of operation**:
+
 * It takes time to execute an operation
 * Modelled by *invocation event* and *response event*
 * Notation:
@@ -704,11 +706,13 @@ through *concurrent objects*
 $$proc(e)$$: denotes the process for the operation
 
 $$object(e)$$: denotes the *objects* associated with the operation
+
 * For this chapter, all operations are applied by a single process on a single object
 
 #### History
 
 **History** ($$H$$, $$<_ H$$):
+
 * Is a directed acyclic graph
 * $$H$$ is the set of operations
 * $$<_ H$$ is an irreflexible (no edge to itself) transitive (through other nodes) relation
@@ -718,18 +722,21 @@ $$object(e)$$: denotes the *objects* associated with the operation
 **$$<_ H$$** definition:
 
 $$e <_ H f$$
+
 * $$resp(e)$$ occurred before $$inv(f)$$
 * If $$e$$ and $$f$$ overlap there is no $$<_ H$$ relation
 
 **Process order** definition
 
 $$(proc(e) = proc(f)) \wedge (resp(e) \text{ occurred before } inv(e))$$
+
 * For any two operations $$e$$ and $$f$$, the response of the first operation must occur before the invocation of the next (no overlapping operation) for
 the same process
 
 **Object order** definition
 
 $$(object(e) \cap object(f) \neq \emptyset) \wedge (resp(e) \text{ occurred before }inv(f))$$
+
 * For any two operation on the same object, the response of the first operation occur before the second
 * TODO: check if this definition
 
@@ -738,13 +745,15 @@ $$(object(e) \cap object(f) \neq \emptyset) \wedge (resp(e) \text{ occurred befo
 **Object subhistory** ( $$H\mid P$$ ): is sequence of the events in $$e$$ in $$H$$ such that $$object(e) = x$$ (all events involves $$x$$)
 
 **Equivalent history**: two history are composed of exactly the same set of invocation and events.
+
 * Ordering of operations does not matter
 
 **Sequential History**: if $$<_ H$$ is a total order (DAG is a linear line).
+
 * History would occur if there was only one sequential process in the system (linear line of DAG)
 
-
 **Legal Sequential History**: it meets the sequential specification of all the objects (the specification for the object if only a single sequential process)
+
 * ie read-write register $$x$$ is legal if:
   * every read operation that returns $$v$$, the latest write operation before the read operation has to write $$v$$
 * ie sequential queue:
@@ -754,24 +763,33 @@ $$(object(e) \cap object(f) \neq \emptyset) \wedge (resp(e) \text{ occurred befo
 ### Sequential Consistency
 
 **Sequential Consistency** definition: A history $$(H, <_ H)$$ is sequentially consistent if
+
 * there exists a sequential history $$S$$ equivalent to $$H$$ such that
   * $$S$$ is legal sequential execution
   * and $$S$$ satisfies process order
     * Each process behaviour is the same in concurrent and sequential execution (ordering within the process is the same)
 
 Sequential Consistency Examples
+
 1. $$H_1 = P \ write(x,1), Q\ read(x), Q\ ok(0), P \ ok()$$
-  * $$H_1$$ is sequentially consistent as it is equivalent to the following legal sequential history
+
+* $$H_1$$ is sequentially consistent as it is equivalent to the following legal sequential history
     $$S = Q\ read(x), Q\ ok(0), P\ write(x,1), P\ ok()$$
+
 2. $$H_2 = P \ write(x,1), P \ ok(), Q\ read(x), Q\ ok(0)$$
-  * $$H_2$$ is a sequential history (operations are linear) but it is not legal (write 1 then read 0).
-  * It is sequentially consistent as it is equivalent to
+
+* $$H_2$$ is a sequential history (operations are linear) but it is not legal (write 1 then read 0).
+* It is sequentially consistent as it is equivalent to
     $$S = Q\ read(x), Q\ ok(0), P\ write(x,1), P\ ok()$$
+
 3. $$H_3 = P \ write(x,1), Q\ read(x),P \ ok(), Q\ ok(), P\ read(x), P\ ok(0)$$
-  * Is not sequentially consistent as the process order must be maintained
-    * P writes 1 before P reads 0 which is not possible as there are no other write operation
+
+* Is not sequentially consistent as the process order must be maintained
+  * P writes 1 before P reads 0 which is not possible as there are no other write operation
+
 4. $$H_4 = P\ write(x,1), Q\ read(x), P\ ok(), Q\ ok(2)$$
-  * Not sequentially consistent as no equivalent history will contain a write(x,2) for Q to read 2
+
+* Not sequentially consistent as no equivalent history will contain a write(x,2) for Q to read 2
 
 ### Linearizability
 
@@ -779,6 +797,7 @@ Sequential Consistency Examples
 the execution is legal.
 
 **Linearizability Definitions**:
+
 * Lecture Notes:
   * execution is equivalent to some legal execution such that each operation happens instantaneously at some point between the invocation and response
 * Text Book:
@@ -788,6 +807,7 @@ the execution is legal.
       * Non-overlapping operations need to maintain ordering
 
 **Examples**:
+
 * $$H_1 = P\ write(x,1), Q\ read(x), Q\ ok(x), P \ ok()$$
   * Is linearizable as both operations are overlapping and do not have $$<_ H$$ relationship
   * Equivalent to:
@@ -801,42 +821,48 @@ the execution is legal.
 **Local Property** for linearizablity definition: for all objects $$x$$, $$H\mid x$$ is linearizable $$\Rightarrow$$ $$H$$ is linearizable
 
 **Local Property** for sequential consistent:
+
 * Does not hold for sequential consistency
 
 #### Local Property Proof
 
 1. Given linearization of all objects $$x$$ ($$H\mid x$$), we will have a linear DAG ($$S_x, <_ x$$)
 2. Construct an acyclic graph that orders all operations on any object
-  * Combining all the DAGs across all objects ($$<_ x$$)
-  * Includes all the ordering in history across objects ($$<_ H$$)
-    * This graph preserves $$<_ H$$ which checks the second condition of linearizablity
+
+* Combining all the DAGs across all objects ($$<_ x$$)
+* Includes all the ordering in history across objects ($$<_ H$$)
+  * This graph preserves $$<_ H$$ which checks the second condition of linearizablity
+
 3. Show that the new graph is acyclic (sequential history):
-  * $$<_ x$$ are acyclic (linearizable) so if a cycle exists it must involve two objects
-  * Can combine all adjacent similar edge:
-    * Two adjacent $$<_ {x_1}$$  and $$<_ {x_2}$$ into a single edge
-    * Two adjacent $$<_ {H_1}$$  and $$<_ {H_2}$$ into a single edge
-  * End up with $$<_ H , <_ x , <_ H$$ or  $$<_ x , <_ H , <_ x$$
-  * If $$<_ H , <_ x , <_ H$$ leads to a cycle means there is a cycle in $$<_ H$$ which contradicts as all $$<_ H$$ is transitively irreflex
+
+* $$<_ x$$ are acyclic (linearizable) so if a cycle exists it must involve two objects
+* Can combine all adjacent similar edge:
+  * Two adjacent $$<_{x_1}$$  and $$<_ {x_2}$$ into a single edge
+  * Two adjacent $$<_{H_1}$$  and $$<_ {H_2}$$ into a single edge
+* End up with $$<_H , <_ x , <_H$$ or  $$<_ x , <_H , <_ x$$
+* If $$<_H , <_ x , <_H$$ leads to a cycle means there is a cycle in $$<_ H$$ which contradicts as all $$<_ H$$ is transitively irreflex
   
 ### Casual Consistency (out of CS4231 scope)
 
 **Intuition**: Minimum possible time to read and write is less than the communication latency
+
 * It takes a long time for a process to know of write events by other process (ie distributed memory)
 * There is a communication delay for events
 
-**Definitions**: A history ($$H, <_ H$$) is casusally consisten if for each process $$P_i$$, there is a legal sequential history ($$S_ i, <_ {S_i}$$)
-* Where $$S_i$$ is the set of all operations of $$P_i$$ (only $$P_i$$) 
+**Definitions**: A history ($$H, <_H$$) is casusally consisten if for each process $$P_i$$, there is a legal sequential history ($$S_ i, <_ {S_i}$$)
+
+* Where $$S_i$$ is the set of all operations of $$P_i$$ (only $$P_i$$)
 * All the write operations in $$H$$
 * $$<_ {S_i}$$ respects the following order:
   * Process order: If $$P_i$$ performs $$e$$ before $$f$$, then $$e$$ is ordered before $$f$$ in $$S_i$$
   * Object order: all operations must be legal (read-write legal)
 
 Notes:
+
 * Related writes be seen by all process in the same order
 * Concurrent writes may be seen in different order
 * Sequential consistency -> Casual Consistency
 * Casual Consistency implies that legal sequential history for every process and not for the entire system
-
 
 ### Consistency Definitions for Registers
 
@@ -847,7 +873,7 @@ Notes:
   * When read does not overlap with write
     * read returns the most recent write
   * When read overlap with write
-    * read returns one of the most recent write 
+    * read returns one of the most recent write
     * or the value written by one of the overlapping writes
 * Safe:
   * When read does not overlap with any write:
@@ -857,6 +883,7 @@ Notes:
 ## Chapter 7: Models and Clocks
 
 **Motivation**: to allow for ordering of events in a distributed system. Types of ordering:
+
 * Physical time model: assume that there is a shared physical clock where you
 can get the time of all events. This will allow you order of all the events where
 events of different processes will be interleaved.
@@ -866,6 +893,7 @@ events happened-before.
 ### Model of a Distributed Systems
 
 **Characteristics**:
+
 * **Absence of a shared clock**: it is impossible to have a completely in-sync
 shared clock.
 * **Absence of shared memory**: no process can have a global view of all process
@@ -873,6 +901,7 @@ shared clock.
 failure.
 
 **Application**: based on message passing between processes.
+
 * Messages are passed asynchronously between processes
 * Consist of a set of $$N$$ processes.
 * *Channel*: Consists of a set of unidirectional communication channel between two processes.
@@ -887,10 +916,12 @@ failure.
 ### Model of Distributed Computation
 
 #### Interleaving Model
+
 * Defines a *run* as a global sequence of events (across multiple processes)
 * Events can be totally ordered
 
 #### Happened-Before Model
+
 * Definition: The **happened-before** relationship ($$\rightarrow$$) is the **smallest** relation that satisfy
   * If $$e$$ before $$f$$ in the **same process** then $$e \rightarrow f$$ (Same process)
   * If $$e$$ is the **send event** of a message and $$f$$ is **receive event** then $$e \rightarrow f$$ (Send-receive)
@@ -935,6 +966,7 @@ public class LamportClock {
   }
 }
 ```
+
 * Initialization: all process will initialize their clock to `1`
 * tick: represent an internal event occurred -> increment the
 * sendAction: send the message with the current time and then increment the current time at the end.
@@ -951,6 +983,7 @@ $$ (s.c, s.p) < (t.c, t.p) = (s.c < t.c) \vee ((s.c = t.c) \wedge (s.p < t.p))$$
 Definition: a map from state to a vector of dimension (n) with the following constraint
 
 $$\forall s,t : s \rightarrow t \Leftrightarrow s.v < t.v$$
+
 * As $$\rightarrow$$ (happen-before) is a partial order, $$<$$(>) is also a partial order
 
 Comparing vectors:
@@ -994,6 +1027,7 @@ public class VectorClock {
   }
 }
 ```
+
 * Each process will have an interpretation of what progress (time) of all other process.
   * The interpretation of the current process time can only be updated by the current process
   * The interpretation of other process time can only be updated by receiving other process interpretation
@@ -1016,9 +1050,11 @@ only update the current process interpretation of the sender time.
 ### Matrix Clock
 
 A process will store all process interpretation of other processes time.
+
 * This will allow a process know if all other process saw that process's event.
 
 Components:
+
 * Each process with store a $$N\times N$$ matrix where the $$j$$th row of $$P_i$$
 represents $$P_i$$ interpretation of what $$P_j$$ interpret other processes time to be.
 * $$i$$th row of $$P_i$$ represents the vector clock of $$P_i$$
@@ -1059,6 +1095,7 @@ public class MatrixClock {
   }
 }
 ```
+
 * Construction:
   * Initialize all to `0` except for $$P_i$$ interpretation of its own time `M[i][i] = 0`
 * tick:
@@ -1071,6 +1108,7 @@ public class MatrixClock {
   * lastly progress the current time
 
 Application:
+
 * If $$\forall j : M[j][i] \geq k$$, all process are aware of event `k` in `M`.
 
 ## Chapter 9: Global Snapshot
@@ -1080,17 +1118,20 @@ Application:
 Problem: take a snapshot of a distributed system that could allow a system to be replayed.
 
 *Global State* definition:
+
 * *Time-based model*: a snapshot taken at a certain time
 * *Happened-before model*: a set of local states that are concurrent with each other.
   * *Concurrent*: no two state have happened-before relationship
 
 Global state *relationship*:
+
 * A global state in *time-based* model **is** a global state in *happened-before*.
   * If you take a snapshot with a synchronized clock it will also be a happened-before
 * A global state in *happened-before* **is not** a *time-based* model (converse not true)
   * A *happened-before* state might not have actually happened in an instance of time previously.
 
 Choosing *happened-before* over *time-based* model:
+
 * Impossible to get *time-based* model without a synchronized clock.
 * *happened-before* allows for easy reasoning of mutual exclusion.
 
@@ -1110,6 +1151,7 @@ $$ f \in F \wedge e \rightarrow f \Rightarrow e \in F$$
 * If $$f$$ is in the cut and $$e$$ **happened-before** $$f$$ then $$e$$ is also in the cut.
 
 **Snapshot of messages**:
+
 * Cut should include messages that are in transit at that instance
 * Messages can change the local state of a process.
 * If the snaphot is taken on $$P_i$$ after message is sent from $$P_i$$ to $$P_j$$
@@ -1121,10 +1163,12 @@ $$ f \in F \wedge e \rightarrow f \Rightarrow e \in F$$
 #### Algorithm Overview
 
 **Requirement**:
+
 * Communication channel are unidirectional (easily extend to bidirectional by adding two channel)
 * Communication channel are FIFO
 
 **Colouring**:
+
 * Each process is assigned a colour of **white** or **red**:
   * **White**: represents before the snapshot was taken
   * **Red**: represents after the snapshot was taken
@@ -1132,6 +1176,7 @@ $$ f \in F \wedge e \rightarrow f \Rightarrow e \in F$$
   * A local state snapshot is right before a process turn **red**
 
 **Messages**:
+
 * When a process turns **red** it will send a **marker** to all of its neighbours
 * A process will turn **red** once it receives a **marker** if it has not already done so.
 * Types of state of channels:
@@ -1150,12 +1195,12 @@ $$ f \in F \wedge e \rightarrow f \Rightarrow e \in F$$
 #### Algorithm
 
 **State**:
+
 * `myColour`: Process will track their own colour
 * `closed[k]`: Each process will track the colour of neighbouring process.
   * `closed[k] = true` when receive a marker from $$P_k$$
 * `chan[]`: for each neighbour, store a buffer that contains all **wr** messages. Print from buffer once the sender (previously white)
 turns **red** (send marker).
-
 
 ```java
 public class RecvCamera extends Process implements Camera {
@@ -1226,17 +1271,19 @@ public class RecvCamera extends Process implements Camera {
   }
 }
 ```
+
 Steps
+
 1. When globalState is initiated at a particular process, it will send a marker to all neighbouring process.
 2. When the other process receive the marker it will turn red and relay to its neighbours
-  1. If in other white process send a message to this red process, that message matters and will be added
+1. If in other white process send a message to this red process, that message matters and will be added
   to the channel state
 3. End when all process has turned red.
 
 ### Global Snapshot for non-FIFO channel
 
 * Each message will contain the colour of the process.
-* The receiver will keep looking for white messages from the sender eventhough it receives a red message already (ordering no guaranteed)
+* The receiver will keep looking for white messages from the sender eventhough it receives a read message already (ordering no guaranteed)
 
 (not in scope of CS4231)
 
@@ -1245,3 +1292,185 @@ Steps
 * To prevent any lost message not being in the state.
 * A white sender will keep a buffer of all outing messages before the marker is sent.
 * A white receiver will ACK all white messages. ww messages can be removed from the state.
+
+## Chapter 12: Message Ordering
+
+$$s_i \rightsquigarrow r_i$$: The send event ($$s_i$$) that corresponds with the receive
+event ($$r_i$$)
+
+**FIFO Order**:
+* The message that is first sent by the sender is first received
+by the receiver.
+* Limited to a sender and receiver process (2 process)
+* Definition: any two message from a process $$P_i$$ to $$P_j$$ are received in the same order as they
+were sent.
+* Does not have transitive property across different pairs of processes.
+* Mathematical definition: if a send event $$s_1$$ occurred before $$s_2$$ then the receive
+event $$r_1$$ of $$s_1$$ must occur before the receive event of $$r_2$$ of $$s_2$$
+
+$$s_1 \succ s_2 \Rightarrow \neg (r_2 \succ r_1)$$
+
+
+### Casual Ordering
+
+**Casual Order**:
+* A sequence of messages (through different process) cannot overtake any message.
+* ie: If a message send from A to C first then two messages sent from A to B then B to C. The later
+two message cannot overtake the first message.
+* Has transitive property across different paris of process
+* Definition: If a $$s_1$$ happens before $$s_2$$ ($$s_1 \rightarrow s_2$$) then the receive event $$r_2$$
+of $$s_2$$  cannot occur before the receive event $$r_1$$ of $$s_1$$
+
+$$s_1 \rightarrow s_2 \Rightarrow \neg (r_2 \succ r_1)$$
+
+**Casual Ordering Algorithm** for process $$P_i$$:
+* Data Members:
+  * `M`: 2D array `[1...N, 1...N]` of initialised to `0`
+* To send message to $$P_j$$
+  * $$M[i,j]= M[i,j] + 1$$ (increment) the `[i][j]` entry by one
+  * piggy back $$M$$ as part of the message (increment first then send)
+* To receive a message from $$P_j$$ with $$W$$ piggy-backed in the message
+  * Enable if
+    * $$W$$'s `[i][j]` entry is more than the $$M$$'s `[i][j]` entry by $$1$$
+    * All other entry of $$M$$ is pair wise greater than or equal to $$W$$
+    * Update $$M$$ to be the pairwise max of $$W$$ and original $$M$$
+    * else buffer then message until the condition is true
+    * Formally:
+
+    $$\text{enabled if } (W[j,i] = M[j,i] + 1) \wedge (\forall k \neq j: M[k,i] \geq W[k,i])$$
+
+Intuition:
+* Increment the count when sending message: to make it known that a message is sent from $$P_i$$ to $$P_j$$
+* Piggy back the matrix: to allow $$P_j$$ to know all the messages that hash been sent to $$P_i$$. This will
+enforce happen-before's transitive property.
+* If $$W[k,i] > M[k,i]$$ there is a message sent from $$P_k$$ to $$P_i$$ that happens before the current message
+from $$P_j$$ to $$P_i$$ that has not been received.
+
+### Synchronous Ordering
+
+**Synchronous Ordering**:
+* Messages are sent instantaneously, the time of send and receive are exactly the same
+* Formally: $$s \rightsquigarrow r \Rightarrow T(s) = T(r)$$
+  * If $$s$$ is the send event and $$r$$ is the receive event of the same message, then their time is the same
+* Lemmas
+  * $$e \succ f \Rightarrow T(e) < T(f)$$
+* Corollary:
+  * $$(e \rightarrow f) \wedge \neg (e \rightsquigarrow f) \Rightarrow T(e) < T(f)$$
+  * If $$e$$ happen before $$f$$ and $$e$$ is not the send event of $$f$$ then $$e$$ time is less than $$f$$
+
+
+Message Ordering hierarchy: Synchronous $$\subseteq$$ casusally ordered $$\subseteq$$ FIFO $$\subseteq$$ asynchronous
+* Casually ordered $$\subseteq$$ FIFO $$\equiv$$ casusally $$\Rightarrow$$ FIFO
+  * In the same process, if $$s_1$$ *happen before* $$s_2$$, then $$s_1$$ *occur before* $$s_2$$ and the receive event
+  of $$s_2$$ cannot occur before $$s_1$$
+
+  $$s_1 \succ s_2 \Rightarrow s_1 \rightarrow s_2 \Rightarrow \neg (r_2 \succ r_1)$$
+* Synchronous order $$\subseteq$$ casusally ordered
+  * Assume synchronously ordered. Let $$s_1 \rightsquigarrow r_1$$ and $$s_2 \rightsquigarrow r_2$$ and $$s_1 \rightarrow $$s_2$$
+  * $$T(s_1) = T(r_1)$$ and $$T(s_2) = T(r_2)$$ and $$T(s_1) < T(s_2)$$ (corollary)
+  * Then $$T(r_1) < T(r_2)$$ and $$\neg(r_2 \rightarrow r_1)$$
+
+**Synchronous Ordering Algorithm**:
+* Utilised non-synchronous control message to make all other send and receive message synchronous
+* For each pair of process, assign one to be a big process and one to be small process
+* Each process will have two states. Active: can send or receive message, passive: cannot send or receive message
+* Big process to small process:
+  1. Big process can only send to small process when **big process is active**
+  2. Big process will send a message a message and change state to **passive**
+  3. Small process (receiver) will send an **ack** message then the big process will become **active** again
+* Small process to big process:
+  1. Small process will request permission from big process. Block until receive permission.
+  2. Big process will only **give permission** when it is **active**
+  3. Big process turn **passive** after giving permission and until it receive the message from the small process
+  4. Note: small process dont need to change the state.
+
+
+### Total order for multicast Message
+
+**Total Order in multicast**: For all message $$x$$ and $$y$$ and process $$P$$ and $$Q$$, if $$x$$ is received
+before $$y$$ in $$P$$ then $$y$$ is not received before $$x$$ in $$Q$$. (plain english: the receive partial ordering
+of messages must between the same across all messages)
+  * total order does not imply FIFO, only enforce the ordering received across all process. Allow for non-FIFO as long
+  as all process also receive non-FIFO
+
+**Causal total order**: if satisfy causal order and total order
+
+**Centralized Algorithm**:
+* A coordinator has FIFO channels with all processes.
+* If a process wants to multicast:
+  1. it will send a request to the coordinator.
+  2. Coordinator will add the request to the request queue.
+  3. Coordinator will process the request from the queue synchronously send the message through the
+  FIFO channel to the receivers
+
+**Skeen's Algorithm**:
+* All process have access to lamport's logical clock
+* Steps to send a message:
+  * A process (initiator) sends a timestamped message (single value) to all destination process
+  * When a process receive a message, it will mark it as *undeliverable* and send it to the sender
+  its logical clock as the proposed timestamp.
+  * Once the initiator receive all the proposed timestamp, it will take the maximum of the timestamp
+  and assign it as the final timestamp to that message and sent to all destination
+  * When a process receive the final timestamp, it willl update the local message timestamp and mark as deliverable
+  * When the message is marked as delivered, it is added to a queue and the application layer will process the message
+  that has the smallest timestamp.
+
+## Chapter 13: Leader Election
+
+### Ring-Based Algorithms
+
+**Anonymous Ring**:
+* Properties: process in the ring do not unique identifier and initialised with identical initial state.
+* No deterministic leader election algorithm:
+  1. There is complete symmetry among all process
+  2. Any deterministic algorithm that starts symmetrical will end symmetrical
+  3. The end symmetrical does not have a leader
+
+**Chang-Roberts Algorithm**:
+
+* Requirement: each process have a unique identifier
+* Algorithm:
+  * Every process sends election message to the left process with its identifier
+  * Also forwards any election message to the left process, if the message's leader identifier is larger
+  than the its own
+  * If a process receives its own message then it is the leader.
+* Note: send to clockwise and receive from anti-clockwise
+* When more than one process starts election:
+  * When a process wakes up by leader election with a smaller leader then it will start its own leader election
+  else it will relay the current leader election
+  
+**Chang-Roberts** analysis:
+* Worse case:
+  * When: process are arrange in clockwise decreasing order
+  * The message sent by process $$j$$ will travel for $$j$$ processes before being swalloed
+  * total number of election message: $$\sum_{j=1}^{j=N} j = O(N^2)$$
+* Best case:
+  * When the process are arrange in clockwise increasing order
+  * Each election message will be consumed by the left neighbour immediately. Travel only one process
+  * total number number of election message $$N$$
+
+### General Graph
+
+**Complete Graph**:
+* Every node is connected to each node
+* Each node will just need to send all other node their ID. The highest ID is the leader
+
+**Construct Spanning Tree**:
+* Any process will initiate spanning tree construct. The initiator will send its id with the initiate message.
+* Steps:
+  1. Initiator will send *invite* message to all of its neighbour
+  2. When a process receives an invite message
+      1. If the process does not have previous a parent, it will treat the sender of the invite as the parent. Sends
+      an accept message to the parent
+      2. else the process will send a reject message to the sender
+  3. Forward the invite message to all of its neighbour except the sender of the original invite.
+  4. Wait for all neighbour to send accept (child) or reject (not child)
+* Multiple instance of spanning tree construct:
+  * If a process receive an instance of spanning tree construct from a process with higher
+  id than the current instance id, it will purge all current state and restart construct for the new
+  instance
+
+**Computing global function**:
+* Use the same idea as spanning tree, instead of just constructing the spanning tree, will ask the children
+node to execute computation and send the answer to the parent
+
