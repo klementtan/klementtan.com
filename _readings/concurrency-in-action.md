@@ -1343,7 +1343,14 @@ perform the loop anyways?
 * Saying operation `A` on a thread synchronizes with operation `B` on another thread is equivalent to `A` leads transitively to `B`
 
 *sequence-before*:
-* The program order within the same function/thread
+* layman: the program order within the same function/thread
+* Formal definition ([more details](https://en.cppreference.com/w/cpp/language/eval_order))
+  * Full Expression: each statement (anything terminated with `;`) is considered to a full expression
+  * According to the standard:
+      > Each value computation and side effect of a full expression is sequenced before each value computation and side effect of the next full expression
+  * Any full expression (ie statement) will be evaluated before the next expression.
+    * This means that the program order within the same function must be enforced
+  * Does not apply if there are "sub" expression within a full expression (evaluating the args)
 * (klement: The book did not touch on sequence-before relationship but these articles were
 useful in my understanding [SO](https://stackoverflow.com/a/4183735/11635160))
 

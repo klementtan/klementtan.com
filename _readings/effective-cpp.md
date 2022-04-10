@@ -457,6 +457,15 @@ prevent UB.
 Understanding base class construction. When a derived class is constructed.
 
 1. It will first call the base class constructor
+  * If the base class constructor is not explicitly constructed, the base class default constructor will be called
+  * Call base class constructor by:
+    ```cpp
+       class D : B {
+          D() : B() {} 
+          D(&D) : B(D) {...}
+
+       }
+    ```
 2. **Only base class data members** will be initialized. Derived class data members will not be initialized yet.
 3. Virtual functions in base class **will not point to derived class' function during base class constructor**
   - Why: derived class data members will not initialized. Calling the derived class function before
@@ -917,6 +926,15 @@ Types of cast
   * `static_cast<T>(expression)`: for implicit conversion (ie int to double)
 
 Problems with casting:
+* Casting a pointer of a derived class to a base class could result in additional cost of
+getting the base class pointer.
+  * In C++ the pointer for a derived class `&d` might differ in address
+  from the pointer of a base class from that derived class pointer
+  ```cpp
+  Derived d;
+  Base* b = &d;
+  assert(b!=d);
+  ```
 * When casting a derived **object** to base **object** with `static_cast`. C++ will create a temporary copy of the base
 object and call the function on it.
   * Solution is to call base class function directly `Base::foo()` in the derived class function
@@ -1504,60 +1522,55 @@ class Rationale {
 
 ### Item 47: Use traits classes for information about types
 
-I do not really understand this example but the main takeaway is that if you would like perform
-different logic for different types, have the custom class expose the same public data member (`iterator_category`)
-and a traits class (`iterator_traits`) that will parrot the type out.
+(klement: Revisited this item a few months later after initially reading it. I did not understand
+this item fully the previous time.)
 
-To further allow the different types to handled differently in compile time, we can overload different function with the explicit types in parameters.
+Problem: when different types with the same API should be handled differently in a template function.
+* Example: `std::advance` for the different types of iterators
 
-Type tags: Are simple empty struct class that acts as a enum
+Solutions: use *traits* to get the tag for the different types and from the tag, use tag dispatch to
+invoke the correct overloaded function.
 
-```cpp
-template<...>
-class deque {
-public: 
-  class iterator {
-    public:
-      // assign tag to the calls
-      typedef std::random_access_iterator_tag iterator_category;
-  }
-}
-template<...>
-class list {
-public: 
-  class iterator {
-    public:
-      typedef std::bidrectional_iterator_tag iterator_category;
-  }
-}
+**Traits**:
+* Requirements: need to be able to extract the traits for all types (built in and user defined)
+  * Nesting the trait within a built in type is not possible
+* Use *Trait Classes* (actually is a template struct)
+  * For user-defined type, the default *Trait Class* will just echo back the nested typedef of the user defined type
+    ```cpp
+    template<typename IterT>
+    struct iterator_traits {
+      // Echo back the nested iterator_category typedef
+      typedef typename IterT::iterator_category iterator_category;
+    }
+    ```
+    * Calling `iterator_traits<dequeu::iterator>::iterator_category`  will return the `iterator_category` defined in `dequeu::iterator_category`
+  * For builtin types, there is partial/full *Trait Class* specialisation that
+  will define a specialised template
+    ```cpp
+    template<typename T>
+    struct iterator_traits<T*>
+    {
+      typedef randome_access_iterator_tag iterator_category;
+    }
+    ```
+    * Calling `iterator_traits<int*>::iterator_category` will return the `iterator_category` defined in partial template specialisation instead
 
-template<typename IterT>
-struct iterator_traits {
-  typedef typename IterT::iterator_category iterator_category; // parrot out category
-}
-
-// partial speicialisation: only apply to all pointer types
-template<typename T*>
-struct iterator_traits {
-  typedef random_access_iterator_tag iterator_category; // set all pointer types to random_access_iterator_tag
-}
-
-// overloaded function for random_access_iterator_tag only
-void doAdvance(IterT& iter, DistT d, std::random_access_iterator_tag) {
-  return iter += d;
-}
-void doAdvance(IterT& iter, DistT d, std::bidrectional_iterator_tag) {
-  ...
-}
-
-template<typename IterT, typename DistT>
-void advance(IterT& iter, DistT d) {
-  doAdvance(iter, d, 
-    typename std::iterator_traits<IterT>::iterator_category()) // get the category for the IterT
-}
-
-```
-
+**Tag dispatch**:
+* Using *Trait Class* we will be able to get the tag for each type and use overload resolution to invoke the correct class
+  * Iterators example:
+    * `strct input_iterator_tag {}`
+    * `struct output_iterator_tag {}`
+    * `struct forward_iterator_tag: public input_iterator_tag {}`
+    * `struct bidirectional_tag: public forward_iterator_tag {}`
+    * `struct random_access_iterator_tag: public bidirectional_tag {}`
+* Overloaded function that takes in an extra *Tag* parameter that will help with the overload resolution
+  * ie `void doAdvance(Iter& iter, Dist d, std::random_access_iterator_tag)`, `void doAdvance(Iter& iter, Dist d, std::bidirectional_tag)`
+  * The tag parameter is an empty class that is used solely for overload resolution
+* Tags can be polymorphic to allow for the polymorphism in the tag dispatch
+  * If some types have inheritance nature (ie forward iterator is a input iterator),
+  there is not need to define two overloaded function for the parent and child type. Instead
+  the compiler will automatically invoke the parent tagged function if the child tagged function is not
+  present
 
 ## Chapter 8 customizing `new` and `delete`
 
