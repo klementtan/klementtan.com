@@ -1666,9 +1666,9 @@ Algorithm:
     honest node. 
     * Each processor decides on the same value at the end of a round with an honest king
 
-### Chapter 18: Self-Stabilisation
+## Chapter 18: Self-Stabilisation
 
-#### Self-Stabilisation Spanning Tree Construction
+### Self-Stabilisation Spanning Tree Construction
 
 *Problem*: building a spanning tree of node. The seen topology of the tree of nodes
 could be corrupted at any point.
