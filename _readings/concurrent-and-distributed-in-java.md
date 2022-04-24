@@ -1474,3 +1474,214 @@ of messages must between the same across all messages)
 * Use the same idea as spanning tree, instead of just constructing the spanning tree, will ask the children
 node to execute computation and send the answer to the parent
 
+## Chapter 15: Agreement
+
+*Failure model* definition: how the environment can fail
+
+* ie: process crash, adversarial process or link (communication) failure
+
+*Timing model* definition: how long will messages take (bounded or unbounded)
+
+### Fischer, Lynch and Paterson (FLP)
+
+*Agreement*: a set of process need to agree on a single bit (set or unset)
+
+*Failure model*: Only **process crash** but **no link failure**
+
+*Timing model*: finite but **unbounded** time to send messages
+
+*Problem*:
+* `N` processes and `N` is known to all processes.
+* Each process starts with initial value of `{0,1}`
+* Some process will need to make a decision of $$0,1,\perp$$ (not decided)
+* Once a process has decided, it cannot change the decided value
+
+*Assumptions of environment*:
+* *Initial Independence*: process choose their initial value independently (all
+permutation of initial value allowed)
+* *Commute property of disjoint events* (cummutative):
+  * The order in which events on different process are executed does not matter. $$e(f(G)) == f(e(G))$$
+* *Asynchrony of events*: any receive events might be arbitrarily delayed
+
+
+*Faulty process model*:
+* There are infinite runs of the algorithm and a fault process only has a finite number of steps
+in the run (process crashed)
+* *admissible* run: at most one process is faulty
+* Reliable message system => all messages sent to nonfaulty
+
+*Protocol Requirements*:
+* **Agreement**: two nonfaulty process cannot commit on different values (must
+be in agreement)
+* **Nontriviality**: both values `0` and `1` should be possible outcomes. Protocol cannot hard code
+the decision
+* **Termination**: a nonfaulty process will decide in finite time.
+
+*Indecision*:
+
+* Let $$G.V$$ be a set of decision values the global state can reach form $$G$$ eventually.
+* Bivalent if $$\mid G.V\mid = 2$$ - can reach `0,1`
+    * Bivalent state signifies indecision - cannot decide between `0` or `1`
+* Univalent if $$\mid G.V \mid = 1$$ - can reach only `0` or only `1`
+    * $$G.V = \{ 0 \}$$ - G 0-valent
+    * $$G.V = \{ 1 \}$$ - G 1-valent
+
+*Step*:
+* The system will move from one global state to another
+* When a process `p` receives a message (can be null)
+* `p` based on local state and message send other messages
+* `p` based on local state and m, change p's local state
+
+#### Impossibility with 1 faulty process
+
+**Lemma 1**: every protocol must have a bivalent initial state (cannot decide on 0 or 1). Proof:
+* Proof by contradiction: assume that there is a protocol with univalent initial state
+* There exist an initial 0-valent (`S0`) state and 1-valent (`S1`) state that differs only in the initial state of process `p`.
+* If `p` were to be fault (take not steps), `S0` and `S1` will be identical and should decide on the
+same value.
+* Contradicts the protocol as it allows for one process to be faulty and `S0` should not equal
+to `S1`
+
+**Lemma 2**: we can keep a system in an indecisive state
+* $$G$$ starts with a bivalent state, let event $$e$$ on $$p$$ be allowed
+* Let $$\mathcal{G}$$ be states reachable from $$G$$ **without applying $$e$$**
+* Let $$\mathcal{H}$$ be states after applying $$e$$ to $$\mathcal{G}$$. $$\mathcal{H} = e (\mathcal{G})$$
+* Proof of claim 1: $$\mathcal{H}$$ is bivalent
+  * Let $$E_i$$ be an $$i$$-valent global stae reachable from $$G$$.
+  * Let $$F_i$$ represent the result of applying $$e$$
+  * If $$E_i \in \mathcal{G}$$ means $$E_i$$ reachable without applying $$e$$
+  and $$F_i = e(E_i) \in \mathcal{H}$$
+  * else $$E_i$$ is reached by applying $$e$$ and some events to $$\mathcal{G}$$ (no $$e$$)
+  so $$F_i \in \mathcal{H}$$ (reached after applying $$e$$ to $$\mathcal{G}$$)
+  * $$\mathcal{H}$$ will contain both $$E_0$$ and $$E_1$$
+* Proof of claim 2: there exists neighbours $$G_0,G_1$$ such that
+  $$H_0 = e(G_0)$$ is 0-valent and $$H_1 = e(G_1)$$ is 1-valent
+  * Layman: there exist neighbouring state that are 0-valent and 1-valent 
+  respectively such that applying an event will not change the valency
+  * Let $$t$$ be smallest sequence to $$G$$ such that valency of $$et(G)$$ different from $$e(G)$$
+    * This exists as claim 1 states that $$\mathcal{H}$$ is bivalent => there
+    exists a sequence of events such that $$et(G)$$ different from $$e(G)$$
+  * As $$G_0$$ and $$G_1$$ are neighbours, there exists $$f$$ such that
+  $$G_1 = f(G_0)$$
+    * If the process of event of $$f$$ and $$e$$ are different, this means
+
+      $$e(G_1) = ef(G_0)$$
+
+      $$\Rightarrow e(G_1) = fe(G_0) \ cummutative$$
+
+      $$\Rightarrow e(G_1) = f(H_0)$$
+
+      $$\Rightarrow \ 1-valency = \ 0-valency \ (contradiction)$$
+    * If the process of events of $$f$$ and $$e$$ are the same
+      * If the process becomes fault, then the final state is still bivalent
+
+Intuition of proof:
+* Any process that goes from bivalent to univalent state will have a critical step ($f$)
+* Critical step cannot be based on the order of process independent execution
+* Critical step is done by single process.
+* As other process cannot distinguish between if the critical step is slow or faulty => forever stuck
+
+
+### Consensus in Synchronous Systems
+
+*Synchronous*: there is an **upper bound** on the **message delay** and 
+**duration of actions**
+
+Types of faults:
+* *Crash*: a process halt, does not perform anything and stay halted forever
+(detectable in synchrnous)
+* *Crash + Link*: processor can crash or a link may go down. If a link goes down,
+it stays down forever.
+  * Link go down could cause partition (some pair of nodes cannot communicate)
+* Omission:
+  * Send omission: only send a proper subset of messages it supposed to send
+  * Receive omission: only receive a proper subset of messages it supposed to receive
+* Byzantine failure: fails by exhibiting arbitrary behavior
+  * Most extreme form of failure
+
+**Synchronous system consensus**:
+* Set of values is any set of values that can be **totally ordered**.
+* Each process $$P_i$$ starts with any value $$v_i$$ from the set.
+* The goal is for all process to set a value $$y$$. The value can only be set once and is called the decided value
+* Requirements:
+  * *Agreement*: two non-faulty process cannot decide on different value
+  * *Validity*: if all process propose the same value,
+    the decided value should be the same
+  * *Termination*: non-faulty process decides in finite time.
+
+#### Crash failure consensus
+
+Algorithm:
+* Definitions:
+  * $$f$$ is the maximum number of process that can fail.
+  * Each process maintains $$V$$ which is the set of values that it knows that have been proposed.
+* Steps:
+  1. Process $$P_i$$ proses a value and adds it to $$V$$
+  2. For $$f +1$$ rounds:
+    * Each process sends to all other process new values added to $$V$$
+    * Each process will also receives the values sent by other process $$P_j$$
+      * As the system is synchrnous, $$P_i$$ will only wait for $$P_j$$ until the
+      upper bound is up otherwise $$P_j$$ is deemed as crashed.
+* Intuition:
+  * Make all process to agree on the set $$V$$ and decide on the lowest number
+* Proof:
+  * termination: each process will only execute $$f+1$$ rounds
+  * validity: decided value is chose from $$V$$
+  * agreement: all process same $$V$$, agree on the same lowest value
+  * All non-faulty process will end up with the $$V$$
+    * If $$x$$ in $$V_i$$ but not in $$V_j$$ at round $$ < f+1$$ then $$P_i$$ will successfully transmit
+    $$x$$ to $$P_j$$ in round $$f+1$$
+    * If $$x$$ in $$V_i$$ in round $$ = f+1$$, then $$x$$ has been transmitted through $$f+1$$
+    process. As there are only $$f$$ faulty process, another process would have added $$x$$ before $$f+1$$
+    and at $$f+1$$ that process would have sent it to $$V_j$$
+
+
+#### Byzantine General Agreement
+
+Problem: $$f$$ process are adversarial and can execute any behaviour
+
+Algorithm:
+* State:
+  * $$ N > 4f$$
+  * Each process has a preference
+  * Each process has $$V$$ as well (view of all process values)
+* Steps:
+  1. For $$f+1$$ rounds:
+    1. Each process exchanges its value with all other process
+      * It determines an estimate for the value (`myvalue`) by getting a value that is the majority (>N/2)
+    2. Processor receives the value from the **coordinator** 
+      * If no value received => coordinator failed and assumes a default value for the king
+      * Set the value as `kingvalue`
+    3. Decide if the process should use the king value.
+      * If $$V$$ has more than $$N/2 + f$$ copies of `myvalue` then my value is chosen for the process
+      * otherwise use the `kingvalue`
+* Proof:
+  * Validity:
+    * There are $$>= N-f$$ valid process => valid process receive $$N-f$$
+    ($$> N/2 + f$$) valid $$v$$. If all process agree on $$v$$ initially,
+    then the valid $$v$$ will always trump the king value.
+  * Agreement:
+    * There are $$f$$ adversarial process but $$f+1$$ rounds => 1 round will have a non-faulty process
+    * The 1 honest king will have $$N/2 + 1$$ at least correct $$w$$ and will broadcast it to all other
+    honest node. 
+    * Each processor decides on the same value at the end of a round with an honest king
+
+### Chapter 18: Self-Stabilisation
+
+#### Self-Stabilisation Spanning Tree Construction
+
+*Problem*: building a spanning tree of node. The seen topology of the tree of nodes
+could be corrupted at any point.
+
+*Constraints*:
+* Each node have a set of neighbouring nodes
+* Each node's state/view of tree can be corrupted
+
+*Algorithm State*:
+* `parent`: the parent node
+* `dist` the distance from the root node
+
+**Algorithm**:
+* Non root node:
+  * reads the values (dist) of neighbouring nodes by sending a query message
+  * For all neighbouring node, the node with the shortest distance is the parent of the node

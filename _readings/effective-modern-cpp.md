@@ -335,7 +335,7 @@ decltype(auto) f2()
 }
 ```
 
-#### Item 4: Know how to view deduced type
+### Item 4: Know how to view deduced type
 
 * Using compiler:
   * force a compilation error using the type you want to find
@@ -356,13 +356,14 @@ Pros
 1. Prevent uninitialized variables.
   * With `auto`, variables will never be able to be declared without any initialization. This will prevent bugs
   such as uninitialized integers or accidentally calling the default constructor on an object
-  ```cpp
-  int x; // UB
-  auto x = 5;
 
-  Foo f; // accidentally calling default constructor
-  auto f = Foo(x,y,z);
-  ```
+    ```cpp
+    int x; // UB
+    auto x = 5;
+
+    Foo f; // accidentally calling default constructor
+    auto f = Foo(x,y,z);
+    ```
 2. Prevent writing types that have long name (ie `typename std::iterator_traits<It>value_type`)
 3. Declare closures
   * Previously, closures (captures surrounding scope) cannot be defined as it is known only to the compiler.
@@ -522,6 +523,7 @@ We should use alias (`using`) instead of `typedef` because of the following reas
   it could declare `type` as something else (might not be a type). This will result
   in the `typedef` template in template class being a dependent type.
   * For alias template, it will definitely be a type so there is no dependencies
+
   ```cpp
   template<typename T>
   class Widget {
@@ -619,6 +621,7 @@ Benefits of `delete` over private + undefined
 * c++98 method of private + undefined will only be caught in link time while
 c++11 method of `delete` will be caught in compile time
 * Use overloaded `delete` to prevent implicit conversion. (side note: c++ always prefer to convert float to double instead of int)
+
   ```cpp
   bool isLucky(int num); // allow the arguments to be int, char, float
 
@@ -633,16 +636,17 @@ c++11 method of `delete` will be caught in compile time
   ```
 * Prevent use of template specialisation for certain template arguments.
   * Using full specialisation to state that the function is deleted
-  ```cpp
-  template<typename T>
-  void processPointer(T* ptr);
 
-  template<>
-  void processPointer<void>(void*) = delete;
+    ```cpp
+    template<typename T>
+    void processPointer(T* ptr);
 
-  template<>
-  void processPointer<char>(char*) = delete
-  ```
+    template<>
+    void processPointer<void>(void*) = delete;
+
+    template<>
+    void processPointer<char>(char*) = delete
+    ```
   * If the function template is member function, declare the deleted function in namespace scope(outside of the class)
 
 ### Item 12: Declare overriding functions `override`

@@ -49,6 +49,12 @@ On the process side, it will see each frame as a **page**. Thus for a purely pag
 the virtual address is made up of `page_id|offset` the `page_id` is for getting the correct
 **frame** in physical memory and the `offset` (d) is to get the address of the correct word in the frame.
 
+*Page table implementation*: most system (linux) uses `N`-level paging table (N tables of tables).
+* A single layer page table will require the table to have a size of the total number of pages.
+* N layer page tables allows for a more compact incomplete tree structure
+* Trade off: getting the address of a frame from and address will require traversing all `N`
+layers. The OS counters this by using a TLB
+
 **Translate page to frame**
 
 To map the `page_id` to `frame`, the OS has a **paging table** that maps the page number to the frame address in
