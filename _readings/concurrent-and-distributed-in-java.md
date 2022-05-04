@@ -1,6 +1,6 @@
 ---
 title: "Concurrent and Distributed in Java"
-excerpt: "Personal notes"
+excerpt: "Personal notes for CS4231"
 toc: true
 ---
 

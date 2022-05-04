@@ -4,7 +4,7 @@ categories:
   - Post
 tags:
   - C++
-excerpt: "An overview of NUMA and the various aspects for it"
+excerpt: "An overview of how we can tune the performance of our system."
 ---
 
 ## Memory Access
@@ -21,14 +21,43 @@ of page address for the whole memory => fit more page address to physical frame 
   * Can be manually requested by user (*hugetlbfs*) or automatically created by kernel (*TransparentHugePage*)
   * TransparentHugePage: uses a synchrnous memory compaction algorithm to group smaller pages to big page. Incur cost
   of the algorithm.
+  * Additional benefit of having more contiguous memory in physical memory.
+    * Contigous virtual address might span across different frames but each frame
+    might not be adjacent
+    * Huge page => bigger frame => more contiguous physical memory
 
 
 ## Non-Uniform Memory Access (NUMA)
 
-**Why NUMA**:
-*
+Sources:
+* [INTRODUCTION 2016 NUMA DEEP DIVE SERIES](https://frankdenneman.nl/2016/07/06/introduction-2016-numa-deep-dive-series/)
+* [NUMA Deep Dive Part 3: Cache Coherency](http://www.staroceans.org/cache_coherency.htm)
+* [NUMA DEEP DIVE PART 1: FROM UMA TO NUMA](https://frankdenneman.nl/2016/07/07/numa-deep-dive-part-1-uma-numa/)
 
-**NUMA Trade offs**
+**What is NUMA**:
+* Memory access time depends on the position of the processor and position of the memory.
+  * Local memory (same numa node) can be access faster than remote memory (different numa node)
+
+**Why NUMA**:
+
+* Allow for segregation of memory (each NUMA node has their segregated memory)
+  * UMA problem:
+    * On the wire level, the memory one processor can access the memory at one time
+    * Single bus to access the shared memory has **limited bandwidth**.
+    * Scalability problem: More processor => longer bus length => higher latency.
+  * NUMA: Allow for simultaneous memory access when a process on different nodes
+  access.
+  different local memory.
+  * Prevent a single process from starving memory access of other process
+* Easy to scale with more processors => scale horizontally by adding more nodes
+
+### Cache Coherence NUMA
+
+* NUMA cache architecture:
+  * Each core has its own private L1 and L2 cache
+    * Private cache that cannot be accessed and written by other core
+  * Last Level Cache (LLC) shared amongst core
+  
 
 ### Fine Tuning NUMA
 
