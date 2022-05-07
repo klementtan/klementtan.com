@@ -1428,3 +1428,170 @@ not *strong-happens-before*
     * Another thread might load another value from $$v_i$$ at $$T_i$$
   * When trying to store the value, the value will be added to the end of the change list but
   the pointer might still remain at the same position.
+
+#### Acquire-Release Ordering
+
+Requirements for acquire-release:
+* Establishes a synchronize-with relationship between an acquire (read operation)
+and release (load operation ).
+
+Benefits:
+* Problem: In a relax model, if operation A is sequence before B in thread 1 and thread 2 sees operation B,
+it is does not mean thread 2 can see operation A as well.
+* With acquire release, thread 2 seeing operation B means if thread 2 try to load operation A with relaxed, 
+it will guarantee to see it. A - sequence before -> B and B - synchronize with -> load B so loading A will
+transitive synchronize with A.
+* Can be used as a synchronization point for any previous relaxed operation.
+  * Operation 0,..., N-1 are relaxed but N is a release operation
+  * If another thread acquire the Nth operation then it will also see all 0,..., 
+  N-1 even though it is relaxed
+
+Example:
+
+```cpp
+void write_x_then_y()
+{
+  x.store(true, std::memory_order_relaxed); // (1)
+  y.store(true, std::memory_order_release); // (2) - release
+}
+
+void read_y_then_x()
+{
+  while(!y.load(std::memory_order_acquire)); // (3)
+  if (x.load(std::memory_order_relaxed)) // (4)
+    z++
+}
+
+int main()
+{
+  x = false;
+  y = false;
+  z = 0;
+  std::thread a(write_x_then_y);
+  std::thread b(read_y_then_x);
+  a.join();
+  b.join();
+  assert(z.load() != 0); // never false
+}
+```
+
+* (1) and (5) are relaxed
+* Why `z != 0`:
+  * (1) happens before (2) because they are on the same thread
+  * (2) synchronize with (3) because of acquire-release
+    * Acquire a value that was released => establish a synchronize with operation
+    * (klement: what if two thread release the same value, which one will the acquire synchronize with?)
+    * (klement: how does this work under the hood? The books talks about batch id but there is no idea of ids here)
+  * By transitive properties, (3) happens before (1) => (4) happens before (1)
+  * (4) will definitely see (1) and x will be true.
+
+**Transitive Synchronization**
+
+```cpp
+void thread_1()
+{
+  data[0].store(42, std::memory_order_relaxed);
+  data[1].store(97, std::memory_order_relaxed);
+  data[2].store(17, std::memory_order_relaxed);
+  data[3].store(-141, std::memory_order_relaxed);
+  data[4].store(2003, std::memory_order_relaxed);
+  sync1.store(true, std::memory_order_release); // (1)
+}
+
+void thread_2()
+{
+  while(!sync1.load(std::memory_order_acquire)); // (2)
+  sync2.store(true, std::memory_order_release); // (3)
+}
+void thread_3()
+{
+  while(!sync2.load(std::memory_order_acquire)); // (4)
+  assert(data[0].load(std::memory_order_relaxed) == 42);
+  assert(data[1].load(std::memory_order_relaxed) == 97);
+  assert(data[2].load(std::memory_order_relaxed) == 17);
+  assert(data[3].load(std::memory_order_relaxed) == -141);
+  assert(data[4].load(std::memory_order_relaxed) == 2003);
+}
+```
+* The assertion pass for all `data` even thought all the operations are relaxed.
+* Operation in the same thread have sequence before relationship.
+* Why assertion pass all the time:
+  1. All the relaxed store operations sequence before (1) in thread1
+  2. The store-release synchronize (1) in thread 1 with the load-acquire (2) in thread 2 as they read the same value (`x=true`)
+    * By transitive property, the relaxed store happen before (2)
+  3. The load-acquire (2) of sync1 sequence before store-release of sync2 (3) because in the same thread
+    * By transitive property, the relaxed store happen before (3)
+  4. The load-acquire (4) of sync2 synchronize with the store-release of sync2
+    * By transitive property, the relaxed store happen before (4)
+    * All other relax loads of data will happen after the relax store.
+
+#### When to use the models
+
+* Bad usage of `memory_order_acq_rel`
+  * When a read modify operation does not check for a particular value
+  * The absence of the check means there is no "acquiring"
+  * Example:
+    * `fetch_sub` (--x): what the original (acquire) value of `x` is not used.
+    Using `memory_order_acq_rel` will not have synchronize with relationship with any
+    of the store-release operation by other thread
+    * `fetch_or` (x |= ...): same reason as above
+* sequential consistency:
+  * act as a default acquire-release
+  * Can be replaced with acquire-release if a set operations should be done atomically
+    * As above, the first N-1 operation are relaxed except for the Nth operation which will
+    synchronize with another acquire-release pair
+* acquire-release:
+  * always prefer as it can provide sequential consistency like behaviour without the global ordering
+  overhead
+
+#### Memory Order Consume
+
+* WARNING: do not use this. Standard says that it always prefer acquire-release
+instead of consume-release
+* Instead of all relaxed operation before a store-release happening before
+all relaxed operation in a synchronized load-consume, only the data dependent operations
+on the load-consume are happened before.
+
+#### Release Sequence and synchronize-with
+
+* When a single store operation with release or sequential order followed by a
+chain of read-modify with acquire order.
+* Then: The first store-release synchronize with the last load-acquire even though there might be
+a sequence of non-store-release operation in the middle.
+* Benefit: do not need the whole chain to be synchronized if we have all operation to only
+synchronize with the first store-release.
+
+Example:
+```cpp
+// Thread 1:
+A;
+x.store(2, memory_order_release);
+
+// Thread 2:
+B;
+int n = x.fetch_add(1, memory_order_relaxed);
+C;
+
+// Thread 3:
+int m = x.load(memory_order_acquire);
+D;
+```
+* When the sequence is thread 1 -> 2 -> 3.
+* The load in thread 3 will be the value stored by thread 2 but since thread 2 did not use
+release, then technically there is no synchronize with.
+* With release sequence, it does not matter and will establish the synchronize with relationship
+even though thread 2 is in the middle.
+
+#### Memory Fence
+
+* `std::atomic_thread_fence(std::memory_order_release)`: all operations after the fence are release operation
+* `std::atomic_thread_fence(std::memory_order_acquire)`: all operations before the fence are acquire operation
+* To synchronize the fences, a load operation before the acquire fence need to
+synchronize with the store operation after the release fence.
+* **Note**: Works with non-atomics as long as the synchronizing function is atomic.
+
+#### Ordering non-atomic operations
+
+* If a non-atomic operation is sequence before an atomic operation in the same thread. When the atomic
+operation happens before another operation in another thread, the non-atomic operation also happens before it.
+
