@@ -561,7 +561,7 @@ T parallel_accumulate(Iterator first, Iterator last, T init) {
 
 #### Protecting rarely updated data structure (Read-Writer)
 
-Problem: There are data strucutes that are rarely updated by writers (exclusive access) and access a lot by readers (no writers)
+Problem: There are data structure that are rarely updated by writers (exclusive access) and access a lot by readers (no writers)
 
 `shared_mutex`:
 * Allow for easy reader and writer synchronization
@@ -1595,3 +1595,298 @@ synchronize with the store operation after the release fence.
 * If a non-atomic operation is sequence before an atomic operation in the same thread. When the atomic
 operation happens before another operation in another thread, the non-atomic operation also happens before it.
 
+## Chapter 6: Designing lock-based concurrent data structures
+
+*Serialization definition*: threads takes turns access the data protected. The access to the data structure can
+be serialized into a linear chain.
+
+**Requirements**:
+* Multiple threads access the data structures concurrently
+* All threads have a consistent view of the data structures
+* Invariants of the data structure will not be violated
+* Providing for as much concurrency as possible while maintaining the above requirements
+  * Aim for smaller protected region => fewer operation serialized => more concurrency
+
+
+**Guidelines**:
+* Safety:
+  * Ensure no threads can see a broken invariant of a state
+  * Interface should be provide complete function to prevent the need on synchronization
+  on the user side
+  * Be mindful of how exceptions happen and how they could break the invariants
+  * Restrict the scope of the locks and avoid nested locks to prevent deadlocks
+* Enable genuine concurrency (minimize Serialization):
+  * Restrict scope to allow operations to be performed outside the lock
+  * Can different part of the DS be protected with different mutex (dont need to compete for the same lock on independent parts)
+  * Do all operations need same level of protection
+
+### Thread-safe stack
+
+
+```cpp
+#include <exception>
+struct empty_stack: std::exception
+{
+  const char* what() const throw();
+}
+
+template<typename T>
+class threadsafe_stack
+{
+private:
+  std::stack<T> data;
+  mutable std::mutex m;
+public:
+  threadsafe_stack() {}
+  threadsafe_stack(const threadsafe_stack& other)
+  {
+    std::lock_guard<std::mutex>(other.m);
+    data=other.data;
+  }
+  threadsafe_stack& operator=(const threadsafe_stack&) = delete;
+  void push(T new_value)
+  {
+    std::lock_guard<std::mutex> lock(m);
+    data.push(std::move(new_value));
+  }
+  std::shared_ptr<T> pop()
+  {
+    std::lock_guard<std::mutex> lock(m);
+    if (data.empty()) throw empty_stack();
+    std::shared_ptr<T> const res(std::make_shared<T>(std::move(data.top())));
+    data.pop();
+    return res;
+  }
+  void pop(T& value)
+  {
+    std::lock_guard,std::mutex> lock(m);
+    if (data.empty()) throw empty_stack();
+    value = std::move(data.top());
+    data.pop();
+  }
+  bool empty() const
+  {
+    std::lock_guard<std::mutex> lock(m);
+    return data.empty();
+  }
+}
+```
+
+Thread Safety:
+* All member functions accessing and modifying the stack are protected by the mutex
+* Possible race condition if user call `empty()` then `pop`.
+  * Mitigated by always checking if the stack is empty within the `pop` and throwing
+  an exception if it is.
+* Possible Exceptions:
+  * Locking a mutex can throw exception (very rare)
+    * mitigated by locking the mutex at the top of the function, if throw an exception, invariant
+    not broken
+    * unlocking a mutex will never throw
+  * Empty stack exception: only thrown before modifying the underlying stack => invariant not broken
+  * `std:make_shared`: could throw if OOM but will not affect as the underlying stack will not be modified.
+  * Copy constructor/move constructor could throw but does not affect as the underlying stack will not be modified.
+* Possible deadlock:
+  * Calling user provided copy constructor and move constructor
+  * If the user's copy/move constructor call the thread safe stack functions, there will be deadlock
+* constructor and destructor: okay to assume that the user will not call the member function on a partially constructed/deleted stack
+
+Cons:
+* Large serialization in the access to the stack.
+* Cannot wait for an item.
+
+### Thread Safe Queue
+
+#### Thread Safe Queue using a single lock
+
+```cpp
+template<typename T>
+clas threadsafe_queue
+{
+private:
+  mutable std::mutex mut;
+  std::queue<std::shared_ptr<T>> data_queue;
+  std::condition_variable data_cond;
+public:
+  threadsafe_queue()
+  {  }
+  void wait_and_pop(T& value)
+  {
+    std::unique_lock<std::mutex>lk(mut);
+    data_cond.wait(lk, [this]{return !data_queue.empty()});
+    value = std::move(*data_queue.front());
+    data_queue.pop();
+  }
+  bool try_pop(T& value)
+  {
+    std::lock_guard<std::mutex> lk(mut);
+    if (data.mepty())
+      return false;
+    value = std::move(*data_queue.front());
+    data_queue.pop();
+    data_queue.pop();
+  }
+  std::shared_ptr<T> wait_and_pop()
+  {
+    std::unique_lock<std::mutex> lk(mut);
+    data_cond.wait(lk, [this]{return !data_queue.empty(); });
+    std::shared_ptr<T> res = data_queue.front();
+    data_queue.pop();
+    return res;
+  }
+  std::shared_ptr<T> try_pop()
+  {
+    std::lock_guard<std::mutex> lk(mut);
+    if (data_queue.empty())
+      return std::shared_ptr<T>();
+    std::shared_ptr<T> res = data_queue.front();
+    data_queue.pop();
+    return res;
+  }
+  void push(T new_value)
+  {
+    std::shared_ptr<T> data(std::make_shared<T>(std::move(new_value)));
+    std::lock_gaurd<std::mutex> lk(mut);
+    data_queue.push(data);
+    data_cond.notify_one();
+  }
+  bool empty()
+  {
+    std::lock_guard<std::mutex> lk(mut);
+    return data_queue.emtpy();
+  }
+}
+```
+* Implementation same as thread safe stack but have additional try_pop that uses condition variable
+* Storing of shared pointer in the underlying queue will prevent any OOM exception
+when trying to convert the queue value to shared pointer in pop
+  * Copying of shared pointer will not throw exception
+* Con: not much concurrency as all access to the underlying queue need to be serialized
+
+#### Thread Safe queue using fine-grained locks and conditional variable
+
+General Idea:
+* Instead of a using `std::queue` that requires a lock every time we access or modify the it, use a self implemented
+node based queue.
+* DS: a `unique_ptr` to the head of the queue and a pointer (observer) to the tail of the queue
+  * Use a sentinal node for the tail to prevent having to lock both the head and tail when performing push/pop
+    * With sentinal:
+      * If the head is not equal to tail, any other operation (only pop because push will be locked) will never
+      make the head equal to tail. Tail can only advance "backward".
+      * when popping, as long as the head does not equal to the tail, it is guaranteed that advancing the head will not affect anything. This is due to pushing only modifying the tail (not equals to head).
+      * allow for minimum locking (only when checking if head equals to tail)
+* Algorithm:
+  * pop:
+    * Check if the tail is equal to the head. If not equal => not empty.
+    * Advance the head to the next node and return the previous head.
+  * push:
+    * de-sentinalize the tail node by moving the value into the node
+    * create a new sentinal tail node and append it to the end
+
+
+```cpp
+template<typename T>
+class threadsafe_queue
+{
+private:
+  struct node
+  {
+    std::shared_ptr<T> data;
+    std::unique_ptr<node> next;
+  };
+  std::mutex head_mutex;
+  std::unique_ptr<node> head;
+  std::mutex tail mutex;
+  node* tail;
+  std;:condition_variable data_cond;
+
+  node* get_tail()
+  {
+    // get the tail in the minimum time
+    std::lock_gaurd<std::mutex> tail_lock(tail_mutex);
+    return tail;
+  }
+  std::unique_ptr<node> pop_head()
+  {
+    std::unique_ptr<node> old_head = std::move(head);
+    head = std::move(old_head->next);
+    return old_head;
+  }
+  std::unique_ptr<std::mutex> wait_for_data()
+  {
+    std::unique_ptr<std::mutex> head_lock(head_mutex);
+    data_cond.wait(head_lock, [&]{return head.get() != get_tail();});
+    return std::move(head_lock);
+  }
+  std::unique_ptr<node> wait_pop_head()
+  {
+    std::unique_lock<std::mutex> head_lock(wait_for_data());
+    return pop_head();
+  }
+  std::unique_ptr<node> wait_pop_head(T& value)
+  {
+    std::unique_lock<std::mutex> head_lock(wait_for_data());
+    value = std::move(*head->data);
+    return pop_head();
+  }
+
+  std::unique_ptr<node> try_pop_head()
+  {
+    std::lock_gaurd<std::mutex> head_lock(head_mutex);
+    if (head.get() == get_tail()) {
+      return std::unique_ptr<node>();
+    }
+    return pop_head();
+  }
+  std;:unique_ptr<node> try_pop_head(T& value)
+  {
+    std::lock_gaurd<std::mutex> head_lock(head_mutex);
+    if (head.get() == get_tail())
+    {
+      return std::unique_ptr<node>();
+    }
+    value = std::move(*head->data)
+    return pop_head();
+  }
+public:
+  threadsafe_queue():
+    head{new node}, tail(head.get()) 
+  {}
+  threadsafe_queue(const threadsafe_queue& other) = delete;
+  threadsafe_queue& operation=(const threadsafe_queue& other) = delete;
+  std::shared_ptr<T> try_pop(T& value) {
+    std::unique_ptr<node> old_head=try_pop_head();
+    return old_head ? old_head->data : std::shared_ptr<T>();
+  }
+  bool try_pop(T& value) {
+    std::unique_ptr<node> const old_head = try_pop_head(value);
+    return old_head;
+  }
+  std::shared_ptr<T> wait_and_pop() {
+    std::unique_ptr<node> const old_head = wait_pop_head();
+    return old_head->data;
+  }
+  void wait_and_pop(T& value) {
+    std::unique_ptr<node> const old_head = wait_and_pop(value);
+  }
+  void push(T new_value);
+  bool empty() {
+    std::lock_guard<std::mutex> head_lock(head_mutex);
+    return (head.get() == get_tail());
+  }
+};
+
+template<typename T>
+void threadsafe_queue<T>::push(T new_value)
+{
+  std::shared_ptr<T> new_data(std::make_shared<T>(std::move(new_value)));
+  std::unique_ptr<node> p(new node);
+  {
+    std::lock_guard<std::mutex> tail_lock(tail_mutex);
+    tail->data = new_data;
+    node* const new_tail = p.get();
+    tail->next = std::move(p);
+  }
+  data_cond.notify_one();
+}
+```
+* `get_tail` is refactored for reusable code and ensure that minimum lock time is used for checking the tail
