@@ -1890,3 +1890,209 @@ void threadsafe_queue<T>::push(T new_value)
 }
 ```
 * `get_tail` is refactored for reusable code and ensure that minimum lock time is used for checking the tail
+
+#### Thread-safe tables
+
+**Goal**: implement a thread safe table that allows numerous queries and some modification
+
+* Wrapping each query and modification operation with `std::shared_lock` (reader and writer lock)
+  * Unnecessary synchronization between operations that read/modify different buckets in a hash table that uses chaining.
+* Ideal solution: fine grain `std::shared_lock` for each bucket.
+
+```cpp
+template<typename Key, typename Value, typename Hash=std::hash<Key> >
+class threadsafe_lookup_table
+{
+private:
+  class bucket_type
+  {
+  private:
+    typedef std::pair<Key, Value> bucket_value;
+    typedef std::list<bucket_value> bucket_data;
+    typedef typename bucket_data::iterator bucket_iterator;
+    mutable std::shared_mutex mutex;
+
+    bucket_iterator find_entry_for(Key const& key) const
+    {
+      // assume tha the reader lock is held
+      return std::find_if(data.begin(), data.end(),
+                          [&](bucket_value const& item)
+                          { return item.first == key; })
+    }
+  public:
+    Value value_for(Key const& key, Value const& default_value) const
+    {
+      // reader lock
+      std::shared_lock<std::shared_mutex> lock(mutex);
+      bucket_iterator const found_entry = find_entry_for(key);
+      return (found_entry == data.end()) ? default_value : found_entry->second;
+    }
+    void add_or_update_mapping(Key const& key, Value const& value)
+    {
+      // writer lock
+      std::unique_lock<std::shared_mutex> lock(mutex);
+      bucket_iterator const found_entry = find_entry_for(key);
+      if (found_entry == data.end())
+      {
+        data.push_back(bucket_value(key,value));
+      }
+      else {
+        found_entry->second = value;
+      }
+    }
+
+    void remove_mapping(Key const& key)
+    {
+      // writer lock
+      std::unique_lock<std::shared_mutex> lock(mutex);
+      bucket_iterator const found_entry = find_entry_for(key);
+      if (found_entry != data.end())
+      {
+        data.erase(found_entry);
+      }
+    }
+  };
+  std::vector<std::unique_ptr<bucket_type>> buckets;
+  Hash hasher;
+  bucket_type& get_bucket(Key const& key) {
+    // Size is constant so does not need a lock
+    std::size_t const bucket_index = hasher(key) % buckets.size();
+  }
+public:
+  typedef Key key_type;
+  typedef Value mapped_type;
+  typedef Hash hast_type;
+  threadsafe_lookup_table(unsigned num_buckets=19, hash const& hasher_=Hash()) :
+    buckets(num_buckets), hasher(hasher_)
+  {
+    for (unsigned i = 0; i < num_buckets; i++)
+    {
+      buckets[i].reset(new bucket_type)
+    }
+  }
+  threadsafe_lookup_table(threadsafe_lookup_table const& other) = delete;
+  threadsafe_lookup_table& operator=(threadsafe_lookup_table const& other) = delete;
+  Value value_for(Key const& key, Value const& default_value = Value()) const
+  {
+    return get_bucket(key).value_for(key, default_value);
+  }
+  void add_or_update_mapping(Key const& key, Value const& value)
+  {
+    get_bucket(key).add_or_update_mapping(key, value;)
+  }
+  void remove_mapping(Key const& key)
+  {
+    get_bucket(key).remove_mapping(key);
+  }
+  std::map<Key, Value> threadsafe_lookup_table::get_map() const
+  {
+    std::vector<std::unique_lock<shared_mutex> > locks;
+    for (unsigned i = 0; i < buckets.size(); i++)
+    {
+      locks.push_back(std::unique_lock<std::shared_mutex>(buckets[i].mutex));
+    }
+    std::map<Key,Value> res;
+    for (unsigned i = 0; i < buckets.size90; ++i)
+    {
+      for (bucket_iterator it = buckets[i].data.begin(); it!=buckets[i].data.end(); it++)
+      {
+        res.insert(*it);
+      }
+    }
+    return res;
+  }
+};
+
+```
+
+## Chapter 7: Designing lock-free concurrent data structures
+
+Definitions:
+* Blocking: uses mutex, condition variables or futures for synchronizing the data
+* Non-blocking: don't use blocking library functions (might not be lock free)
+  * Spin-lock is non-blocking but is not lock free.
+  * In addition to non-blocking:
+    * Obstruction free: if all other threads are paused, any given thread will complete its operation in a bounded time (no deadlock)
+    * Lock-free: multiple thread operating on a data structure, after a bounded number of steps one of them will complete its operation.
+    * Wait-free: every thread will complete its operation in bounded number of steps ( even if other threads operate on it )
+
+Lock-Free:
+* Threads must be able to access the same data structure concurrently ( do not need to perform the same operation ).
+* If one of the thread is suspended, then the other other thread must still be able to continue its execution.
+* Usually use compare and exchange: 
+  * Redo the operation if the data structure has been modified by another thread.
+  * Will be in a loop but still lock-free as a suspended thread will make the other thread
+  compare and exchange succeed.
+* Could result in a starvation if another thread keeps modifying the DS and prevent a successful
+compare exchange on the main thread. ( If the DS can prevent this, it is wait-free + lock-free )
+
+Wait-free:
+* Stronger condition than lock-free.
+* With additional property that all threads accessing the DS can complete its operation within a bounded time.
+* Any methods that involves a while loop will not be wait-free
+
+### Thread-safe Stack without locks
+
+**Overview**:
+* Implement the stack as a linked list.
+* Pushing Node:
+  1. Create a new node.
+  2. Set its `next` pointer to the current head node.
+  3. Set the head node to point to it.
+    * Possible race condition where multiple nodes try to modify the head node concurrently.
+    * Once head is updated, it should be in a valid state as other reading nodes might acquire the head.
+
+**Implementing push**:
+<iframe width="800px" height="600px" src="https://godbolt.org/e#g:!((g:!((h:codeEditor,i:(filename:'1',fontScale:14,fontUsePx:'0',j:1,lang:c%2B%2B,selection:(endColumn:28,endLineNumber:15,positionColumn:28,positionLineNumber:15,selectionStartColumn:28,selectionStartLineNumber:15,startColumn:28,startLineNumber:15),source:'/**+Concurrency+in+action+(+7.2.1+)+*/%0A%0A%23include+%3Cbits/stdc%2B%2B.h%3E%0A%0A%0Atemplate%3Ctypename+T%3E%0Aclass+lock_free_stack%0A%7B%0A++++private:%0A++++++++struct+node%0A++++++++%7B%0A++++++++++++T+data%3B%0A++++++++++++node*+next%3B%0A++++++++++++node(T+const%26+data_)+:%0A++++++++++++++++data(data_)%0A++++++++++++%7B%7D%0A++++++++%7D%3B%0A++++++++std::atomic%3Cnode*%3E+head%3B+%0A++++public:%0A++++++++void+push(T+const%26+data)+%0A++++++++%7B%0A++++++++++++node*+const+new_node+%3D+new+node(data)%3B%0A++++++++++++new_node-%3Enext+%3D+head.load()%3B%0A++++++++++++while(!!head.compare_exchange_weak(new_node-%3Enext,new_node))%3B%0A++++++++%7D%0A%7D%3B%0A%0Aint+main()%7B%7D'),l:'5',n:'0',o:'C%2B%2B+source+%231',t:'0')),k:100,l:'4',n:'0',o:'',s:0,t:'0')),version:4"></iframe>
+* `compare_exchange_weak`:
+  * Only when `head` is bitwise equal (same address) as `new_node->next`, then we update head to the **desired** argument (`new_node`)
+  * Returns `true` only when the exchange is successful
+  * Takes in expected value by reference, if the exchange failed, the expected value will be updated to the new `head` value. In this situation, it will automatically update `new_node` head
+  to the new `head` ( don't need to manually update `new_node` head to the new head ).
+  * As we are looping over `compare_exchange_weak`, whether or not `compare_exchange_weak` supriously fail does not matter
+    * Supriously fail by returning `false` and not changing the expected ( the expected will be updated in the next loop
+    when `compare_exchange_weak` might not supriously fail )
+
+**Implementing Pop**:
+* Concept:
+  1. Read the current value of `head`.
+  2. Read `head->next`
+  3. Set `head` to `head->next`
+  4. Return the `data` from the retrieved node
+  5. Delete the retrieved node
+* Challenges:
+  * If two threads read pop at the same time, they will read the same head node.
+    * If one of the thread delete the head node before the other, there will be
+    a dangling pointer.
+  * Empty stack: the stack might be empty and `head` might be `nullptr`
+  * Exception safety:
+    * We will only want to modify the stack if there will be no exception thrown after that.
+    * An exception could be thrown when return by value: copying a value from the current stack to
+    the caller stack could result in exception (dynamic allocation).
+    * To solve this we could return to a reference (pointer) to the dynamically allocated value
+  * Memory leak problem:
+    * Not a problem for `push`: just checks equality of the current head vs expected head if the expected head is deleted, we are still not deferencing it (but UB to check equality of free pointer?).
+    * `pop`:
+      * We will take a the pointer to the current head, compare/exchange and free the curent head
+      * It is possible for two threads to have the pointer to the same curent head, if one thread progress
+      faster and deletes the curent head, the other thread will have a dangling pointer
+
+
+**Naive Pop**:
+* Does not handle memory leak
+<iframe width="800px" height="800px" src="https://godbolt.org/e?readOnly=true&hideEditorToolbars=true#g:!((g:!((h:codeEditor,i:(filename:'1',fontScale:14,fontUsePx:'0',j:1,lang:c%2B%2B,selection:(endColumn:80,endLineNumber:34,positionColumn:80,positionLineNumber:34,selectionStartColumn:80,selectionStartLineNumber:34,startColumn:80,startLineNumber:34),source:'/**+Concurrency+in+action+(+7.2.1+)+*/%0A%0A%23include+%3Cbits/stdc%2B%2B.h%3E%0A%0A%0Atemplate%3Ctypename+T%3E%0Aclass+lock_free_stack%0A%7B%0A++private:%0A++++struct+node%0A++++%7B%0A++++++std::shared_ptr%3CT%3E+data%3B%0A++++++node*+next%3B%0A++++++node(T+const%26+data_)+:+data(data_)%0A++++++%7B%7D%0A++++%7D%3B%0A++++std::atomic%3Cnode*%3E+head%3B%0A++public:%0A++++void+push(T+const%26+data)%0A++++%7B%0A++++++node*+const+new_node+new+node(data)%3B%0A++++++new_node-%3Enext+%3D+head.load()%3B%0A++++++while(!!head.compare_and_exhcnage_weak(new_node-%3Enext,+new_node))%3B%0A++++%7D%0A++++std::shared_ptr%3CT%3E+pop()%0A++++%7B%0A++++++node*+old_head+%3D+head.load()%3B%0A++++++//+compare/exchange:%0A++++++//+++successful:+when+head+did+not+change%0A++++++//+++fail:+when+the+head+was+modified+by+another+thread,+old+head+will+be%0A++++++//+++++++++updated+to+what+the+new+head+is%0A++++++while(old_head+%26%26+!!head_compare_exchange_weak(old_head,+old_head-%3Enext))%3B%0A++++++//+If+we+delete+old_head+here,+we+could+have+a+danlging+reference+as+another%0A++++++//+thread+could+still+have+a+reference+to+it+at+the+start+of+the+function.%0A++++++return+old_head+%3F+old_head-%3Edata+:+std::shared_ptr%3CT%3E%0A++++%7D%0A++%7D%0A%7D%3B%0A%0Aint+main()%7B%7D'),l:'5',n:'0',o:'C%2B%2B+source+%231',t:'0')),k:100,l:'4',n:'0',o:'',s:0,t:'0')),version:4"></iframe>
+
+#### Pop without leaks
+<iframe width="800px" height="200px" src="https://godbolt.org/e?readOnly=true&hideEditorToolbars=true#z:OYLghAFBqRAWIDGB7AJgUwKKoJYBdkAnAGhxAgDMcAbdAOwEMBbdEAcgEY3iLk68Ayoga0QHACw8%2BeAKoBndAAUAHuwAM3AFZji1BnVCIApACYAQqbPEFtRHhx9y9VAGFk1AK5M6IEwHZiZwAZHDp0ADkvACN0QjEADmIAB2Q5fAc6N09vXwCUtPs%2BELDIphi4jkSbdDsMgTwGQjwsrx9/a3RbQrp6xrxiiOjYhOsGppac9rkx/tDBsuHKgEprZA9CRFY2AHoAKl2Aajc6RHXCekQATwPQg4ZavgOIA78AOhNXgGYDpYPd7aMagAgoCQSZPqFEJ4MAcjJ8XFF8HJttNUMZzJZXnA4ZhQaC8OgmEk9AS4S48JckvRmOgDgAVHGgqEMORyA7UZCIADWAH0KOd0DzpvcuXi/BZgUlCDgAG4MAkgUEHA7TQgeOwHOhodBGcVK5UqvCoEAgORwRroVA8pJ4QhkhmfTAHVDyhhwiVAg2a7WHMLKPDu/XKrUYCB0g4oOjTUwANmdrp5SxAsOBXuVLoaEFRJqYDC5grNFtQ9pxEAzDCWSyDBt1Fj8ABF9brG58PcrsyB5cgmDhjPCPFGcMAwsXHQc8HBzgxUHIeaFrcgkoHU4bjZ2CD2%2By4Q%2Bhdjjx8geTEeRhaATR23Vyau5uyTu92O4Ohp8uQSvttsjvoDnxqNcYhGIi0KgBwAO5PnQByXGsBzmjKtIDjgACOHi0sgoFhIQZo4EkP4UN6GBsvAz6oL8yAUPqH7jk%2B7I4NMrz0uaeA3Gy4HXNBHjOnwYBsMxYSWgeKqXCck58HRtITnRBwUAODx0Pqwr2IgBwysgOAgae6AEjyO5yBA94EegchViutbVuBNC0vp2rGdWZkrl6Bl%2BsxcL1oZcgALQ4s5r5ps6nRabSum%2BWmumwp8bk%2Ba2dkNk2sUrqp6njoQlw8uczI4Ew1kYIc7hWk%2B06/PZnoGjg%2BEQBOU4znOdALrhrmuQcHAmSVyrFX5VFAhuvZAdc9woTg5wHkegqaeerzVsqVHhMgCp3MxklsikoTMbNT6ENRVVsigHjUCBcG0st/CxGyBDuZNBxUbcE4SYex5jQJ1B0QGDkGk5Nk8gQJ4BaSEVffdP2Wq86DKIg5oGOg%2Bm7dQNqEFW0XAhd00APJ0pgYBgMmADqEE/jdG2VSRgHUNQBwpLhDAUASBM0QS0x4ZtJGzvO5PhS2bkcEjn76CBMS8ENN0RnomWhMADNUnQuAGO5Ty6Z9h4PSaINg/owDoC1HWfoLhPTjVdVgTQpNauyfBqxtDURU1F1lU8EAeR5OvVSzi5FRFjVqBrabtX5l2fsba2xIz05shaNyQazPPUVJjuwQw8EHIhKFoRhJ1wDhF1TZ%2B5F3CTMvXTRctfQ9tHRojr1elRciU7d/lnhJBc2QbE5rMx%2BjXHIwlg4QYlV90Ge14FOk2dlRny99dfw5eXrNgcnQKDc5WFwrgNFXq5c1uvmcHECqC8yK1G0v1HiDY9z0M2FZ2CxLUti0nqH99NyAJ3QyGoT%2BGHYbh2dATLFtOmeB92QsgWpOImoF8BwHfphT%2BKZWppiomdKEz5IKLQTkkCam8IzmhZs4UWQ9CIj1nEXFeIVp7xTgVvY2uY8DUzAkxBeQcrTO1wqBFkTU6H0GSqldKwsmBgTYcIEmlouaAP9vjRhbJzRsnOBQWIFwa6C1OIQc4/AyaLgEjuDBFDfYqmroJB6F1i55R5AVC8MU3Jz1pN7L0KscGSzwbpCAxjTGTwuvbR2zNark1IbCchbU/EqTUiBWxXjcEGHwUZEevobKe2sYZQ4eh6aNWCgjOBVFQLcV4lHU6hA45GQUTRZwDNBbCm5E8SE0IgqzTUUkKko4ABintlQWVoLLH0EY%2BD02cmzIB0wvKOmck03xU8DSJJcpbKKIzmzVhCdaMJwAIl6V0sQXpeBXGmQCYlYJ2DQn2PCY4gyVAsJ4BWQZMZsS15pO5rvUR6BQJYIYNdJ%2BJSZjFNpndUagNiyvTGf0zA3TGr/U%2BXXMxr0qIBxpltA4PZgBwGYoI0mqCZInG6HcVinRqBaK9C0qyGMgXj0CqgV4KAiQWh5DzHkytwZqx5KBZ8XIIC/O8iDE50lBrTErCFaZCUgkPLsTfCJUTNQXJGbM6%2BDjh50GIHQdZJVuVAiSB4KIT1ECKhXB2Qs5wrSwxLGOcmEARV2QxOYDxetvGpMcu05xJFXKmNeByacBqfE4qcXtExRNYyxgOBjO1JKkhkopVS1Wgo6V5ldflEiKzrXTj%2BYM2VXoNXmi1daW0uqnTnDkD4m24b3WFRiiM5UGbXhyFYUkHNpi/nlnjTWAJypbTcJqLw8tJFq2FqMly8h0zUmghWtCx5dAnV6gbGwFY1B2AAFZuA%2BDYBoYgyB2AuEsJYFUawNhWPBFwYgeB1AjpWFyMQag1C6HYOIKdO653sG4HIEAR7t0zt3cQeCWEMggHEEAA"></iframe>
+* Draw backs:
+  * In high load situation, when there is always overlapping `pop`, `(--threads_in_pop)!=0`, `delete_nodes` will never be called.
+
+#### Thread safe stack with hazard pointers
+
+General Idea: Instead of having to wait for only a single threads to be in `pop` before deleting all pending nodes, each thread will save
+its current accessing node in a global list. If a node is being accessed by other thread, the node will be placed in the pending list. Each
+thread will keep polling to see if any nodes are no longer being accessed and delete it.
+
+<iframe width="800px" height="1600px" src="https://godbolt.org/e?readOnly=true&hideEditorToolbars=true#z:OYLghAFBqRAWIDGB7AJgUwKKoJYBdkAnAGhxAgDMcAbdAOwEMBbdEAcgEY3iLk68Ayoga0QHACw8%2BeAKoBndAAUAHuwAM3AFZji1BnVCIApACYAQqbPEFtRHhx9y9VAGFk1AK5M6O5wBkcOnQAOS8AI3RCEAA2YgAHZDl8Bzo3T28dBKT7PgCg0KYIqNibdDsUgTwGQjw0rx8Oa3RbHLpK6rw8kPDImOsqmrqMxrkBzsDuwt7ogEprZA9CRFY2AHoAKnWAajc6REXCekQATy3ArYZyvi2ILYB2ADoTB4BmLZmt9dWjNQBBH/%2BJhegUQngwWyMLxcYXwclWo1QxnMlgecEhmABmL%2BAI8dCSwCCqC2KDxeC2TAYygA%2BnAGAAvaqoKkJQJ4SJyCEvAAiWw4ajUkIsf1GhA8di2tIZhCZLP4kQh2LuQt%2BWy2CJAIAYBCYOGMUPVIDwcEODFQGpwqHRZ0tL2VqoNWuQOr1LgAbsgLesrbK2YRBZi7lz/di/pLGcyPXLCBL6eGfeyjABWMwU6lh6UR1kJxNB21Y36rVZbADqhAYcTi8tBDDkHKNWq2hzihwU/C26EucC2RpNqDAbA5yAA7kFCHI4Dg4ltkBQLlsABKKAHV2sSuJU4ejgN2mNSmWR33bOBxYMqrZxDxhai6kAA1Wq48bkeReDrzdVvijUyzSFcjC0NlT3vNcny3ExomnSsywIP1uVfUCP1Jb8Zl/f90EAvM/mAx930ICAPlvLDgLXCA6A8ahqDiPBCBQojVSMJU72I1VeGjCBcXxQkzk5HkBVtbjIRcclKRpWMM3jMdBQhZFzBwWiz2Yhid2Y1VCy2DAKAYciyRJEUxTZS06JUg0ew7M0QAtadqCZC0gJU1SiwASV9LV0G7Y0FmALsRGoBdFA5XF7F8vg3MXGMOQYdT0E07T3N7KlbKM5i1IAMQYGhFjc4QFC2IcaF8jw4lcqybKJIcJ0QLs8oorYIjOAkiHQQyFJUnBZ3gMT9yzSTkxwJMuQeC0HhQJgisOKl0GUSr9GAdAqRFPhgAgdxSuINU8HMo0cDkKlTNNDVZrwBLUHwmZ5Ps%2BjGKSlS1IUMkCHctzgGoZAwhEC5CDLU4Zz8piLrXHjpOidMuqjOQkzMPqczs/6whNABrGGVIYoNrsu1GWuAtqbjAMBj3O5Grsx4ie2HdbzNFfgcBYCbPqICBTBMYJkBjQg93PA92QuV10r0K90EZlDMOJ9G/ohQMxYdbVdUE91PXRb8tkOzMo3wsWlLF1VDjwRY6DXABadEJKRlGxYAPxw588IJy7lPvNSW3Qx6/O7FmjTcjStOoMkec8dA6xZurDg8BRmuY49DZeTAJIeUZGtI8jKOooW7YfOJI8wIa48OCATONMzzROs6TYlxVc2VAEpadGWoTl1AvSjxXlZBlXfSpViqX2T76COvai%2B3Ji%2B6pF7hF80YtV1EDcN3Rk7O13WZ%2BlB5lYktXhdNv42VGvQMJcPBjkrRgWC2AAVBW/jr9TkCpNC2QgOvtjieSNaI2%2B3PH%2BxEE7ms8EEk%2BG8wBAJ%2Bp4N7/GFNRfS6ktQMF2tfQ41ZqYDyIg/KBVQ7IGgoLiK4dBZYehOg/IWmAooAUiHZVA0DYFUngXoam2wgjKF/sLVUW84g7wFlCfeh9mBuTPo3V%2BFCCBULKDQpgEB/7ngImLchVQgFzCkc0dCL5vyoGvm/P%2B6I5FGXoXgBOFEqI0XVoxUuZ4zbSJgYI6h6VREExfi1N%2BeEzEpyYqA0268/hqWvHQeGTUtjXlGNOWcdA0D%2B1drVNyljqY%2BLCB4HSCxrJbCCWSCIAI1JvyJMcJ2NY1ROjcn3da%2BVGzRXlA9fAlcNoakdM6QSZjKERKYAAhJwSdoWOEVYkBfwwjIHcNOGJ80qh0FwAYUSe5W6RHbvTFBwDFQ7jUs5SIxVSYeC8hcGq7s/IRQGcSOAZR4ZnFnPoU4eTRj5SYmpWkdZtkc26mcPWsJiQHB7r9IirEbhJDpHNMkOBAZ8TMAJKEwk0ydVGZJfifUZJmBsUTLG7UW4SXBr1fqDwY4vVNPhHiv4JGGNToUnWhA9YQPYXbUBosiLzzxVsTS1AFAgOMQCS%2BpomQtIQUwYe20dE1KZSIuhwTn5QsaRgDO2jAZBIwM0uBrTqYPBRf3JhuUJy0AgLjEV/takSqYMNJ0Y05qTWmgYOaQ4Ozw1IsEwVk08DEGVcXdetLN7oG3q5QSnD6DcNPufX4l86nD1cnhcRjikFnjUkOMsU41lmJuXODl4rmX8oFkRBlqrmWstGKRdAQ5UHmKjSIiAjinFl3zJfN%2BVJlU7TykaIt18QZyDVtM05RYqjeMHFbcck4AnO0jUI6NfiyT6CJEE6c7tox9w5NVagtawkXH5qE3szti3hrWV29FUdGlqmOHsQgcA%2BDbQntcIITUfGsTHfgeZ9gDBxU8l2edbKmLtrqdsLuhw2wYuLQmkRDwdW0j1bopOBjZXlRoG5CA96e6Qrtmpbx6ApxHugoEYAZ6lkXsuQunt3ZCCHJZnU9yDZlVSIEZmqxd7PxkiFRioD/BTUMKRtjRVYAFhHXHgMmDwy4yc0IOMvCpG8AZxzVizWWw1IUEOCE0NuGO0iJjRcTZayg3lkrESceiBdnYeum/e53d%2BAlx5M0HKtjkpOVnMJqoL6rHie2vkmqEQYMXEQMsWsTU1oMrOEky4iNrpqQeper81142cqsUmnRHHc0tWJfeDjwqzV2RcTa34LC2GOoPs64%2BvCMR/BXByEe8N26Cb6c5/1zYcA8zZIRM8elxTYb5facpIBxzVCasyai6il1mKRsquh4XZWqmVWI4khHFY1JmCABUxMzG50qxSbx81aSHBtC4JL2boHF2uhrYxotZVVyqVCFrVptmmnacVyr1Wpt1dgjN70yA4jVrPDp%2B2RYADiTs1l5JHu9RcDxJaVcqTXN0eCAGK2PL%2BZuQKJJsc7g8/gu186osC8BFrJUaRmUBtt1AUrkCQ6Rionj10YcsKRqqdHi3yvETUgAaXQBB3xXS4iWcCjQZ2IMrlRgk0SFacPTSM%2Bdn3fs4M0Z8aLGFQ4FBilu0uXIF1yqHg7DiUSTSNPyr0Fp/D0zhVpFRPQga%2BgvGHIXAoL6bJ1FLNrMXJzmNGvux2pPNyZniOcf3mPLHGC6BlrWRZ6gKHKlLdmV/Ij5HqP2v3hRnK/9Nx3es9xhilhrv6JGX93%2BhVweiTfkVrxtS8h37UUWtkzD91tmHFygUxJ46DlqkKoQBwIcKW80ygHyqSeiwjt8fDh6TBGrddGjE7dtz8WXJj25F6Z3eO4y9yNLVE0poftmn0wgi1HdMkR2tOP5G8BWtA0WaL7lTM%2BhduvyfUFqCnDuqEtZceq9dnOWEuXCRZOvaMgaA7tX9ENaIS2Sj7U4823Ftilsschzlmn87rj83rcqNaNssGMhlYUWNf9Eczp38Tc1IXB9B88VMj8slkAB04ozIORaRXQ3JIp%2BdIgjhckhd34XU49YCixzh50KcIpOlsCTdPU2E8JX9rd/ctM3IrtmIkCncrdfcSViY4DaB9AthCoJNThDgKRAhLMXsJdyIiRaQKw5dZdO9ckIciR6wyQyU8QZ1gka8r4QlECFE2RHMLhBw0Ch0zNfJT9cCikH1lhQl8Ar8hsDC5pn1S04By0mNpQq0I97wNDClwZfdgtIty58xWRhJAg1YjEuQ2A5hqB2BExuAfA2ANBiBkB2AXBLBLBslFhbDTAXguBiA8B1Boi5h4YxB%2BRdB2BxAEiiiUj2BuA5AQA1ACiiizpiBsCxwUgQBxAgA%3D%3D"></iframe>
+* Drawbacks:
+  * HPs require iterating through all the HPs to check if there are any outstanding HP for the current resource. This could result in bad time complexity.
