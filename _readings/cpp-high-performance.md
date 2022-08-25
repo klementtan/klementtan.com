@@ -635,3 +635,4 @@ private:
   * `std::pmr::null_memory_resource`: resource that will always throw `std::bad_alloc`
   * `std::pmr::get_default_resouce`: global default resource. Can be set by the users.
   
+(klement: Going to take a break from reading this book as it seems like it does not contain the in-depth insights into high performance I was looking for.)
