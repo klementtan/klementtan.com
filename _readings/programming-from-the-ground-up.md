@@ -417,4 +417,120 @@ ret
   * `%eax` is guaranteed to be overwritten with the return value
   * Except for `%ebp` which will be the same (point to the same stack frame).
 
+### Pow Function Example
+
+Problem: program to calculate $$2^3 + 5^2$$
+
+<iframe width="800px" height="800px" src="https://godbolt.org/e#z:OYLghAFBqRAWIDGB7AJgUwKKoJYBdkAnAGhxAgDMcAbdAOwEMBbdEAcgEY3iLk68Ayoga0QHACw8%2BeAKoBndAAUAHuwAM3AFZji1BnVAM5CpgCNqAT2ILaiPDj7l6qAMLJqAVyZ0dzgDI4dOgAcl6m6IQgABwATMQADshy%2BA50bp7eOonJ9nwBQaFmEdFxNuh2qQJ4DIR46V4%2BHNbotrl0VTV4%2BSFhxbHW1bX1mU1yg12BPUWRsQCU1sgehIisbACkMQDMANSKMgBKigDyApggu4TIwITM2wTbNJ5jN3jo23DIAO7bFB50FXw5NtPkQANZrNQAQQ2OwAKnAcED4pdrrdPo9tigmPEPK87nA3gA3EQeN7ICgQ6FbbYxNYAVkwOw2ACFtnT6ZhaVCYZSYdtMISIhY8AiDA86Pi3kwGIFtsirjcmA8gWMiOhUOLtoR0MBEa9CHJiLzqXJkJLtqgGNVtgoARLUMh0HI6GtOWsomo1gBOL14d4MQXbfTC0XAAB0lLDtra2zDluqvKhUfKMbDr2UeETkLDwGoyHM2wA%2BmNOlni%2BMQJScXI4NRtgASHbbZst1vbGHVuA28p8DU1YBeeh%2BiDoZSJIL8WZVjw1uv1mJtxftradn44A1%2B/uD/jbCCmIxvOi9QhTqHCah1xKfCJLlsw891kVvX7/NqUhioVBzqLEZd0p3xEuMJMMggZPja1SIKCcrIIE%2BrbPuUHbAAtFq6AgYGyLoISDgznKNTMOg%2BpyNOs5/ugDDKLezYwnIAZvOBVAbkGdByNehC7qq2oarKGz/pRswIegvDapS1HicumwPoEwDmkEGY/H8dqkbWDYLhJHYzl2tq9kGhADiwO4jmOfBDqekKdnOdISZJq5MWMekGUOu77go2xHtM5kPjB7HifeIiPgSimvqk76ft%2Bv58QBQFbBhDFBSWSGJHBN6IdBqHanFcrajhixIgRLDEVWyDxHWUWmFRflbPCbw6XQfasb5iJBtQ2ofhYYk2TFmy8TE/HKGG2wAOq1fRGpPp1XVtjC9mbo1N7SGa4GJaCRpQlNi60WadBfMCbzCBKmgzn6iSAfgk0bTRWyLH6cFmuVyhhV%2B5GUZFfXoBV01bB%2B40EkqBDAERBKEBdl0wuB2pyB41C3UCvX/hVlIYXOTQvZVX2bKO%2BC7g9ypoXgSxBKg5lwQ2ajKB6WYwnshwnGc2zws1L52njM7qncZpYjirzGjs4HEp4ZIUEG7nHlqMoKONyC8yLV4RBG3JbLzACSwR7LC5wAGLrg5W6GX6qHga5h7HjLAg9vVjnbgb5pyxxBAyzciJvNjDuK5svNHDIsLq%2BcQ0YrqYFBZD0ObkCDD44T2wC6SvO88ERywpgAjnDVPk3kwx1CdsHDbEQ2zXBR%2Bpx%2B7ABqkL7MrkLMn4yeVu75GfahHzUKgQJGweovTDLUWIFRzfuG3ttfBEJdUjsyHiBA5XxIJA%2Bt%2B3QWIEs2o7iHMNj3yUWUazks/PnrzYkQNQWBBx%2BA2PaYWPEbx27%2BAACzNvlCdv15Cl2tnyLiYgFMmYnwgp%2BChRflpMq71TCAWorReiedW4IU7slfgo8oTI3InIeIb0EaQLvLFBgoJaqQWgog%2BCHc3LEOQZCKGBZ6ySDQdgz%2BWxAZ%2BkuMgJUIk85LG2Hmc8Z8bgX25Cg0CdYojT3AbPTBH1KqaT9LNK2%2BtNTb0eoIwkdYOAxFEVg%2BY5E%2B62VxN2FAls9bOXhuUJRkJUEPV/JPDRH1Z6SS4vtFezl1420CCkEQOAABe7N7jGy7uEEGAiLIj0IIWPMJVyydDfogbEKMJE6M2lsHAwtwJ2zxqja8ek3gOiCJSTQbxnCFjtkjIRKEp4zy0YoySWVwLL0IKvZhTpQ7inuIoykOBM4XkbsoCRO8cGbE6fYUqp9alOLXk0mGCEOrrQ/ldTYpCTbTHbDM2ZfIXF52FoMnApUcDCBjOiLp4RQYbT5A4niEo6oahKhEfQGobECRKSotGVjyliMErRAg2pzR1IaWhKGG8oQYEQGA/8CSoFbCBW1NyqSQl5OxOnUJ4T4iRNqDCQgfx972yCvJE6sKgmFNfo8us1iKm9KomioiUcY5vGAI6OGEo2nKJBbYiR6CMaQ0%2BfFAhDAkqwSQRxCAmVQJvG4SIaONQcAMHME6cyp1mUQI0lsDlapzR%2BPIRxQ2JUNkQR5dBZq2oCaEAlD9SGJEoQGspGweY1B2B0m4D4NgGhiDIHYJQkw5hT6miWCsSSXBiB4HUFa%2BYoIxBqDULodg4huBMFDeGh1TqXVsG4HIEA4aA2OqDcQQUBpUggHEEAA"></iframe>
+
+* Main program:
+  * Push the arguments (`base_number`, `exponent`) for `power` onto the stack - pushing the last argument first
+  * Save the result of the first function (stored in `%eax`) onto the stack - no guarantee that data will remain the same for all registers (except for `%ebp`)
+* Function (`power`):
+  * `.type power,@function`: tells the linker that the symbol should be treated as a function - only relevant when linking > 1 object file.
+  * `jmp power` vs `call power`: call will add the return address to the stack but `jmp` does not.
+  * C calling convention (callee)
+    * Code:
+      ```asm
+      pushl %ebp
+      movl %esp, %ebp
+      subl $4, %esp   # reserve space for local variable (current result)
+      ```
+    * Stack view:
+      ```txt
+      Exponent       <-- 12(%ebp)
+      Power          <-- 8(%ebp)
+      Return Address <-- 4(%ebp)
+      Old %ebp       <-- (%ebp)
+      Current result <-- -4(%ebp) and (%esp)
+      ```
+  * Why local variable (on stack) vs register:
+    * When passing data to another function, you can pass an address on the stack but cannot pass an address to a register.
+    * Not enough register to store all of the local variables.
+  * `imull`: multiplies operand 1 and 2 but store the result in operand 2
+
+### Recursive Factorial Function
+
+<iframe width="800px" height="800px" src="https://godbolt.org/e#z:OYLghAFBqRAWIDGB7AJgUwKKoJYBdkAnAGhxAgDMcAbdAOwEMBbdEAcgEY3iLk68Ayoga0QHACw8%2BeAKoBndAAUAHuwAM3AFZji1BnVAM5CpgCNqAT2ILaiPDj7l6qAMLJqAVyZ0dzgDI4dOgAcl6m6IQ6AA7IcvgOdG6e3tGx8XwBQaFmETo26HYJAngMhHhJXj4c1ui29nzFpXiZIWG51XIlZRUpHV3Nga05kRwAlNbIHoSIrGwApABMAMyKMgBKigDyApgA1AC0uwDiOABu9LsMu3RtJLt4cDhyu1GEyMCEzLsoTFEeeOhng90HM1ABBRZLXYUBh2Ig4EQAOl2ADEiLt0MpmFFaMR7nB0NDYQRCAjqLtkBRQRDlrsoU86bsAFS7BbM3bVCmEXYANmRABUCUS4aSRBSqeDIbtxLsGTKWVCWWyWZz0QtJJc6KhdnJkBS6IjqZCjctBQzXu9PkwdXBkAB3Z62u33PXCajkq4UDx0Qp8XaEApTOLnSyG8GIhS%2Bui7RGoBglI2S02PZ4Wj5fOBGa564DUZCmMVxhPhyP1aOIgHKPDUxG5/PkgD6nSaNbr5mFJLJu27Pd7UoeDIZ3qC6Aw2u9tGMuzthLt%2BjwLptpRB4N7a/XG77tIHzy9PrLlyYfGAFOB3LTVrk1Kb/RA1L%2Bcjg5IAJDLN%2B%2BpYLCTCRV2SgBrQF9UJUpgC8egF0OYFqXfWCNylG5hmnWd50uDt4TFSlkQEZA8XwGC4MI7spWAdA8FTDxH1Hak3XJH9OzFOCpUIb18W/YkMLo70o2pBhUFQF8NUWABWQEoiIqUUQ40UuP3BJvmQX5aABbVDiEFjTCBIUolKZgyIiXYCKIpjt0zBc5woqjtT9YEdRKRB/2pI9TnJET0AYZQ8Tc0xlBMqF6M4/0yKmOgtJA0KZ25QJDIWUSPLxUx/iM4yP1pGdp1Q/BZWjbzfIIHVnFlBcs0mblMXw1cUtgqVmzwSinOQFzdmfTk3I8iTaVotjdkAwggmoOZMAWOYAA41DmABOCbnnKhc9x48FAgXZ81GUMbExpJYzWeBlbOJDwxXmg8MCoOh0joGs8AsKJ2N/ERiAAASOhJqQCmS73BB8nxi0TTHElKapKLVSm1Z6/U6DwKAoA5kN2TNzhdZKqvXZjARJQlvPE/L8FTUl0Vqwlwl4AMkeRrcoQDOq%2BsCYA8V1WH4cJfKvqKhqmrcuQoi82L0D%2Bvzdm22VnnCYRKNnQlUD4QbhvWqbzNQ/Kj1wCgLFJsniNMwlmwcl5kCWiI6b1dKxZ%2B3mojDMFnPJEaIEx8ZTfa%2BDaUF5ygNsqhCE6S5CDAlh%2BEXNrlDV9WpXEW2eb%2B0Y4fcVAwqCqnoz41AA2MPF9FQYOyalG27ej6hY%2B6j2vZ0q19MIGilOa1qecd/mAElodsxDwii55OQeeMhYpKZdgLBRM%2BRqVhAUNOtVhuIlIseOQt2CAOCFgeqqlEQAz4qfosDy448pmfThEDx0FGalNEJZwGzeslqQwRBXJr3yl9pZAzztJ50Dxa/V4Ubq988FcwS%2B2%2BcV77GSlCzLKxNu7ci6vlC%2BIgaIiDotJLs/MuqwIGuCK2uwc4RyiPbXKm4pSb0zNvYKfVdg/wPobZCi8Aa0gDHmPikCXi6RYACKK/A9S5WpDgJgHh3Smx8tzIB1VaS8OoPYHEU8O4LlMFIoUKc%2BELkpGxGhIDaR6C9tAvUaDZ4bzvkfSq6s1z9iFPoOQkUu6dCIKObKDtPLTkeIgOAqiOr0meMAZAaAdSBBmPieM0tRrjSms8O0BIAzTz6i4wiUoKFAQ8RbM%2BaCPqW0aoAs2QixL82bMDQgoNuIHh3mQiGUMYYznvMgHEAj/q0KhIzRcKd0ZVM1NqDmWMjZhL/kYlGmsp6RUJugYmTMhRg2jM2Mo1FwSUy6RrCmpDoz5Xdvk%2BSEAdy6yiGFKJ/NCnRliXiAgyBRhsHGNQdgwluA%2BDYBoYgyB2BgmMOgMwlgdSlV8ZCLgxA8DqCOeMf8Yg1BqF0OwcQ3AmB/IBRcq5Ny2DcDkCAAFnzLnfOIOcT2CQQDiCAA%3D%3D%3D"></iframe>
+
+**Main Function**
+
+```asm
+_start:
+ pushl $4
+ call factorial
+```
+* Push the value `4` onto the stack and call `factorial`
+
+```asm
+addl $4, %esp
+movl %eax, %ebx
+movl $1, %eax
+int $0x80
+```
+* At this point the function `factorial` has return (all recursive call completed)
+* `addl $4, %esp`: move the stack pointer back by `4` bytes (1 word) to clean up the `factorial` parameters
+  * Should always clean up stack after a function returns
+* `movl %eax, %ebx`: move the return value from factorial to the register that will be used for exit code
+
+**Factorial Function**
+
+```asm
+.type factorial,@function
+factorial:
+```
+* `.type` directive tells the linker that the `factorial` symbol is a function
+
+```asm
+pushl %ebp
+movl %esp, %ebp
+```
+* Creates a stack frame and save the caller stack frame
+* Standard C calling convention - should be executed in all instructions
+
+```asm
+movl 8(%ebp), %eax
+```
+* Stores the argument passed by the caller (at address `%ebp + 8`) in `%eax` register
+
+```asm
+cmpl $1, %eax
+je end_factorial
+```
+* `%eax` now stores `n`
+* Check for base case when `n == 1`, if true then move to `end_factorial` routine
+
+
+```asm
+decl %eax
+```
+* At this point `%eax` will not equal to `1`
+* decrease `%eax` (`n`) by one so that it can be passed to the next recursive call
+
+```asm
+pushl %eax
+call factorial
+```
+* Add `%eax` as an argument for the next `factorial` call and call the function
+
+```asm
+movl 8(%ebp), %ebx
+```
+* After the inner call to `factorial`, the register that stores `n` (`%eax`) will be over written by the inner call
+* Copy back the original parameter (`n`) in `%ebx`
+
+```asm
+imull %ebx, %eax
+```
+* Multiply `n` (`%ebx`) with the result of the recursive call `%eax` and store in `%eax`
+
+
+```asm
+end_factorial:
+ movl %ebp, %esp
+ popl %ebp
+ ret
+```
+* Return from function by resetting the stack pointer to base pointer (local variables will be cleaned up)
+* Reset to the caller's base pointer and return to the next instruction in the caller.
 
