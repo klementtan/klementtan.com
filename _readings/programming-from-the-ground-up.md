@@ -534,3 +534,81 @@ end_factorial:
 * Return from function by resetting the stack pointer to base pointer (local variables will be cleaned up)
 * Reset to the caller's base pointer and return to the next instruction in the caller.
 
+## Chapter 5: Dealing wit Files
+
+### UNIX File Concept
+
+Overview: when we want access a file, the operating system will give us a *"number"* (**file descriptor**) which we will use to perform any file operation. Once the we are done , the file will be closed and the file descriptor will be useless.
+
+Using asm to perform file operations:
+1. File open:
+    * To open a file, the program will need to execute a `open` system call, provide the **filename** and the number to represent the open **mode**
+    * `%eax` will hold the system call number `5` (open file)
+    * `%ebx` will contain the address of the first character in the file name (`const char*`)
+    * `%ecx` will contain the file access mode (read/write)
+    * `%edx` store the permission set
+2. Linux will return the file descriptor in `%eax`
+3. Perform read/write (system call) on the file:
+    * Read is system call `3` => move `$3` into `%eax`
+    * Place the file descriptor from \#2 into `%ebx`
+    * Address of the read/write buffer into `%ecx`
+    * The size of the buffer in `%edx`
+    * OS will return the number of bytes read/written in `%eax`
+4. Close the file by executing the system call `6` (move `$6` into `%eax`)
+
+### Buffers and .bss
+
+* Continuous block of bytes used for bulk data transfer
+* Using data segment as a buffer:
+    * Data segment is static data that is initialized using the source code
+        * Source will specifically specify the value of each individual byte in the
+        data segment of the code
+        * ie `.byte 0 0 0 0`
+    * Will require the users to type in the individual elements in the source code (redudant as we do not care what the initial value of the buffer)
+    * The size of the data section directly translate to the size of executable
+        * Executable will contain the same bytes as what the data segement should be initialized to
+        * (klement: can imagine the OS performing a memcpy from the executable into data segment)
+* `.bss`:
+    * Similar to the `data` segment
+    * Does not take up space in the executable
+    * Specificy the size of the memory storage but unable to specific the initial value (uninitialized)
+        * The memory location is initialized to `0`
+    * The buffer can be initialized/modified during runtime but not at initialization of the program
+    ```asm
+    .section .bss
+     .lcomm my_buffer, 500
+    ```
+    * `.lcomm` will create a symbol `my_buffer` that points to a 500 byte storage location.
+
+### Capitalizing all characters in a file
+
+Overview: a program that takes a path to a file and capitalize all the characters in it
+1. A function that takes a block of memory and converts it to upper-case
+    * Takes the address of the block of memory and size
+2. Repeatedly read from into the buffer (read system call might not read all the bytes of a file)
+3. Open and close the necessary files
+
+<iframe width="800px" height="800px" src="https://godbolt.org/e?hideEditorToolbars=true#z:OYLghAFBqRAWIDGB7AJgUwKKoJYBdkAnAGhxAgDMcAbdAOwEMBbdEAcgEY3iLk68Ayoga0QHACw8%2BeAKoBndAAUAHuwAM3AFZji1BnVAM5CpgCNqAT2ILaiPDj7l6qAMLJqAVyZ0QAJmLOADI4dOgAcl6m6IR%2BAMySAA7IcvgOdG6e3n7ESSn2fMGhEWbRcZI26HZpAngMhHgZXj7%2BFVV8NXV4heGRpb7x1rX1jVktQ10hPSUx/eIAlNbIHoSIrGwApP2KMgBKigDyApggANQAKnA4cicJhMjAhMwnKHQAbtF41/onIQkeeCcqLR1moAIKbWInAgnb5LPB/AFA9AnADu%2BDgMOo1BOtDweGichB4P6zz473q6FQUOQJw8CQS0WECgAdESIWytjt9i5MAIBABJMIAcVOHDmJ32DLoULgyN%2B/0BNHQHMhvnFkvoMuRcIRiuBYIhJ3mJwA6pdaKjlZhfOsABxqdYATkdhGRdGQAIYALwspOzhOyAoWp%2BdF1SJVMPFroYVISnQDQaRIehS0IJxYTCIFhOpg8FAo0QjpnFwBpPruHmAGPQDEQGNMFnxCfT6EzhAsEZwQZ9yIbTauMJxyBR0QAtEzkbj8SQIy9yQD8NTafTGUZlQaSYhxSjCPhkT2W23s7n89ElzqFeGDWCTuz%2BoaACKgs6gk4CSr5OhEk7MhRtaXMqgXoMCqd6xGBYEuPsYQCC%2BYRnAIEH3sh4Eoey16vhCcgWHI%2BJMM8IjYnQvSEISN7MugACOHhvgAmgIAD6%2ByKJgYTECcACs34UdRdGMSaOz8mcmDseI3FUTRAj0QxOyYKCD7seB5ESXxDEuIEhwiScABs4m8VJjGYAAGkJ7EcGyN4QsgCSftcvBptZ9B6TR%2BwyQ%2B0GBLR7EOspvGuS4snPgxAkebRDFnDsMhhC43mxBwajmRht79Lh%2BhAYQVJJhgciILuNlEGRr48ZJZwPoK3nOW%2BpX7DIZxmZVsEPpgOw7OxNpJVhOF4QRWLJtEhB0nglWBIKMhGQxBkuKCgSBN5yj2hZRUqaxD5MQAYgxa38oEWlqMlsQXAOA4Hq6eDLNKrwiB466vicd33Q9j2PVZQbRlSKKXHWLb6NcI7rNadoOs67zfk9YNgxClzer6/qBsGV5LbxYQyAAsgAQs1DGgjsQqo6xCFtYtd1IZCaN8m%2BH5pCclBELSdAhKkIg4AAXpSOZ5gWpFzNxf6fj%2BpjGN%2BEJoxzZ6jjKR2/bKrrBkBtQ/Nc1DIDGbMhAQQskhQdz4QecsMHqyJpaiu54pqWvIEwGuQmrZa%2BheiJKsy5yXNcchwEs1CoFbJyhOSfrKKsbMcNpxBqGHgK05du5LIV%2B0nNGch8HIrK%2BTRaMyGta2YwKABaWkcWH3HUCgTD4enmeY0%2BL7seXWc7BN/J53HLjRk2%2BsnpzzYF3tSsGNcRMk%2Bc6DKAC77/tTtZnSIpIYNzYK/pTfA/viI9W7BoIuAA0icBwCmc/LQYhqdVQ3ecybyzUAGpaba92GhcbokTmjboNcoSUqr0oHqliAANYR2mJWwhsRRxwAwcwN0fwqVgptVa5UTijnEODOOD8bjJFSEvOGB55QOwtNlXKOB8ppggDuAEmwOLoFMAkOeiMSqwKYrVdio5b4QxJKg3IGDpRYLtv8MMSoTj4LygQYhpDkoUKoTQqB%2BkzhYxxjFE4e1kFxzqMAV4JxLqeGRCQ%2BoYjKHUIajI7GQpL4MTUKJZBhowjMG1EGW49xHj4W0WQ3w4j9HHxgUYkxHB2IsNYZCfkoZLz8MYCwamojyF6MkcVE%2BniGL%2BBOBwXw4NDT7F4UEi0IStHhJcZEomzJgBK3MCcBiqV6hEhKeMEAVswKCiEvyaajdMA7y5EKHYoIUYkytnIBg7xgw/3/kkNWhYbyZleNiCJcgEjsQiVQuOuUaxNgPJsXwTAGAhGWScfpOY1xoKGYQAe/RQRYmQMIJskzazInsgGZYBsBGvwIUQ2OVkv6%2Bn6d%2BOQHgikABIYG50wOfI4Oxr7TJyZMuZrdkTnNWAA4MQDp5ZXuUIyOdQwEQMKo5OgDEkRyFOIaPQURsQfU1MA2g70aDYmHpUf4vYPQYgxVi1ADEQgwjoFSXCRB0AMqZV%2BDC9KKCMpCFUyyaF%2BjMVYicQU2wzgnC2jtTpwrYgYs2ThEl35RnYh%2BdJMVbFdEMGUFbHBBtMnJhpDM/VIzkBjJiTjLxEAZnUJBeI5QcdRn7l9DGVArpjDNmwYE3BbprEmt0aYZ1H0cBfTRL1KItIFBUgbMGX%2B0RQjUCtm9UcfBLCAj0MANVlqNWuR2O5MInlHWVHNZhfoPoByoGQK/L8AMFrOgBNGLE2ZVmmzTFct6IQc0WqtV8tQ2kh2ltQOW/aJKTiFA8GOtWJwvkjWRuNSa01AiLXZa6Llgquk9LdciYAOB3jSgRTlJFDkXmQtqH/XNVqIl6vYjAtacCwh2pyRIxafLGVwiFRW1Cv7tUSlqlKmV21MDyp/Uqg8CN0x5rnQZJiLEdW3rHVZNJ/rjU22DWO9V1rjFxJfa4hYmGXWWt3bs/gZ5oQHntrc9D/BTWvudVcg8ibCDJqthQbNdlaY7lSAYJckGlTXvzWpQKMiQrFrChFKK8iImIGQ/0TMGAYWhBRLciAXYfhDQbUDR01x5lekpJI7DA6h0h10aOq2E6p0zv4HOhdY0Jr0SmjNNdwjOX8oYl%2Brpbn4b8MEYQ4RJxpaQOw0h%2B9MjH0MLOPh3JCqfZemWIRbMpZtl/yXKs5lStrKLRJhjIUgoTgo1BAVjSzEwNvQYllhIDEoj7p8NUlCgUHwSrCCcV8aMNJbxlVyFG5wAASTTJW1WA3KkVSlXzGbg010teqrbAHQNDOUfrbn%2BaIUJk%2BkXBQxYkaWkNVsDxwr5tCN6Jr1tfNrpXZ8oJS1yf268lmNjgwd2GRNmD52M511PlpCJFmFUCAe82Z7aYTsDlOudT%2BuqbMAnnaNJdTmV0HN/RCYyQkJVrVNKB7TTpHTXxOIFFwA3mtnAGycFaYHx2yjS1c2GiZ%2BGrMICx78iAmAJA1Stdam0QMzfk7EDTvAPCsoDGev0hA7gkBOClyjMNWXfk0BaZwlXkDZYwi8ewxFOUVaq9%2B/akFoLXx2NK4nTSOvcm3mcfYJwZCKBYjsE4U0jjk7%2BG7DVF365Vx/YdqmcMgffid3AcZOS9X7RSKzH1vofc3gnXOD4DECAMTpAyfZSUkis8h/tebi3NkA9MLWf%2B4tXSuqpAeW46BXgOA8F8QgwAvD0E%2BN%2BD1GrJC6LBRCL1PmJkJAa7%2BgSQkmlG5OCbrrNVDcW/78PoDsrQNja6QD7hvZRZJ9ezewPygR3OsNK6vpAPoQ8fxGduDPfhLc/Y/w6EFeQswYfatYf22HWYatp7zB3Zw8L7O67hi7ubtQ7s7DxzAhnOrodRjZQTwSjR94k6laKDk6aAs7xw1iMpVY1boB1ZxzuiECrKErmiThK6d4YQK5a6gQoTqSaT9ZNKT6ITT4KphD7DCQIKWgCJ8D/Q2iNqOgAjvxF40g1oi5i7PCU6/w9rexLw9gKDsRRDCDn7cG0wvC4C2Tew1r1rME6YAgpDAD0wUDZj6CNiXB8aTKVBgLYjBb77STEFHDH59rYhX5Ra36EZmrfizow6Lp/4AFGGMQmHfYr7raWFbb2o2EMZ2G2YOEObLouY3i3gKpgQo5nDk6TbSSRFmFL4apmL343j2H2Zw7/4I5AGxDbB7CaSnCHR2QC7jyTweBJYMGvxajezR6kRUxn4rhpgTgwrtxAK/zVIKpDZnD5G%2BhUCkQAhxgOILZnjHS%2BiP48o/ph69gtHNgZhZhLjVFDRxaoJ/h8Cxh1DWLTgKywr0DAA%2BgJjew%2BhejsyniL464Krj61RdEDgUBFF8wkaEC74VEHiIDLCuj8DexA6ojojBgJ5jhMhdg4BszkgpB8Apw/pWyXzYz1Ida8ja6GhIZ0G1YhD0x8be6v5xZmp0G0AGC7GonHHew/Y4B0HPGi615HGdyBgUAKALHjHkKIDYjizEmvEAh9i9joA9r%2BzMCTBexxaUA4C9E3DxhwyybKCSLoSYThFEGHxwQIQQQKqoJKwjhpimBLCsp1DZhwypibI1grBwDDT7AmjNT27/LXa3hY7OggRmmOhWyoI/FKkqnpTqlBiakKB1B1h6kGk7BGkMQ5zTKWnMxMGAzY5WxuBvAEhUxRB4Ajiai2kspUgKlngTiVRW425qR67NQCjQS%2BmKHY7giWl0EBksEWnZnOhd4QjrxdawQfbk7RIwLv47Q6q3wQiBDbE4lBgR60Inyu5mRJIQglHTztlhGgjzGx7IDx71GwkkguA9TUDsnzFpDsTdK9JPGETRBgBsDXA54KBkYbFCGvKXqtE3h%2B4B6uLrYd67a4HggSm/pHDSpW4nAQmCSgjQkUFI73jmGdkfbNTWHc5xyLmkZ2Jl4YBUgqI178DXDMonTIFXAbGeEyJ1msTfnJEJFzpJEEkGpBjtwL6fG7Gsx3A4gtkYgohGAS4HpOQKpn5yDsSaAV4Ai0A7pM4s6JG7ZjqaDIgK7DlVZxzyHIhErnpklDHXCtg2Qdgq5kgx4EEKoZ7BiMmkksnXqmDUxhYEnEBiiOp0nEZLnh4vwwjOIUJB4epeq/RfEEkJiUkLaxkJLpgeDUD2Cs4AlpgYa0kpqSVli2xujDzMnaUC60DeqLgDgRlRljE66WlFmBnOgWUFk6b%2BmWkMUJAKXzr6mGmghHBYxqXOWvhy4%2BweU1YvyxXxUaQelek%2BliJ0my7ABZUjw5V74Kq0rRBohbnzFPbaV1GJ6Jk3gerxXJmYwgH64ZmIYuLqWGiNUHbDgJk7J1hrF2BDF8Wuj7q4RnhOX8a%2BgxmNETWPBTUnG9mC7rpyjMm56DnQavAKVOXsQxZ3rKVii/k%2BY55pZPFiUUhUizXQVnjmw6y%2BhPXzUOV0ZPZomXmgihCVUsna4hCDU5K4B%2BKHXIiDLkZpjQgA2eXVWvjM6p7KVEYQiq4hDXR0w%2BWxxKJPQQh/SWm9LRh1hsw9igx413z9DOCy6hCkihn1CK7K6gjsX3V4BM0JATmxDuhwFnSsbqJXToBUU0X4X0Xvn2qlot4kht4crSUrkNEvGklbLQ0bFS7IgkroC9g7Iq0vZoIo2voJAQ0y0yzLlYhniblQ3IB7LfinSU1xwp4WWS5uXTlnjw0hi4QDT/hsALDUDsAcTcA%2BBsAaDEDIDsCgjGCtjmDZiJzLDQoQhcDEB4DqDe0LC/xiBhy6DsDiDcBMDp1mKB3B2h1sDcA4pmJJ1B0p3EBAlpAgDiBAA%3D%3D%3D"></iframe>
+
+* Setup
+    * `.equ` directive allow us to name literals (ie `$8`)
+    * `STACK_POSITIONS`: store the offsets from base pointer as constants
+* `convert_to_upper`:
+    ```asm
+    movl ST_BUFFER(%ebp), %eax 
+    movl ST_BUFFER_LEN(%ebp), %ebx
+    ```
+    * In C calling convention, all the arguments are saved on the stack. Using the predefined constant %ebp offset, move the arguments into the registers
+    ```asm
+   cmpl $0, %ebx 
+   je end_convert_loop
+    ``````
+    * Exit the loop if the provided buffer is `0` in size
+    ```asm
+    movb (%eax, %edi, 1), %cl
+    ```
+    * Using indexed indirect addressing mode, copy the character at `%eax` buffer with offset `%edi` and multiplier `1` => `%eax + 1*%edi`
+* Opening files:
+    * Command line arguments are pushed onto the stack before the first instruction
+        * argv and argc will be stored
+    * We will first save the current stack position in %ebp => used to easily access all the cli arguments
