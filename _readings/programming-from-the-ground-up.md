@@ -669,3 +669,206 @@ A function to count the number of records in a buffer (null terminated string)
 ### Reading records from file
 <iframe width="800px" height="200px" src="https://godbolt.org/e?readOnly=true&hideEditorToolbars=true#g:!((g:!((h:codeEditor,i:(filename:'1',fontScale:14,fontUsePx:'0',j:1,lang:assembly,selection:(endColumn:1,endLineNumber:69,positionColumn:1,positionLineNumber:69,selectionStartColumn:1,selectionStartLineNumber:69,startColumn:1,startLineNumber:69),source:'.include+%22linux.s%22%0A.include+%22record-def.s%22%0A%0A.section+.data%0Afile_name:%0A.ascii+%22test.dat%5C0%22%0A%0A.section+.bss%0A.lcomm+record_buffer,+RECORD_SIZE%0A%0A.section+.text%0A%23Main+program%0A.globl+_start%0A%0A_start:%0A%23These+are+the+locations+on+the+stack+where%0A%23we+will+store+the+input+and+output+descriptors%0A%23(FYI+-+we+could+have+used+memory+addresses+in%0A%23a+.data+section+instead)%0A.equ+ST_INPUT_DESCRIPTOR,+-4%0A.equ+ST_OUTPUT_DESCRIPTOR,+-8%0A%23Copy+the+stack+pointer+to+%25ebp%0Amovl+%25esp,+%25ebp%0A%23Allocate+space+to+hold+the+file+descriptors+on+the+stack%0Asubl+$8,+%25esp%0A%0A%23Open+the+file%0Amovl+$SYS_OPEN,+%25eax%0Amovl+$file_name,+%25ebx%0Amovl+$0,+%25ecx+%23This+says+to+open+read-only%0Amovl+$0666,+%25edx%0Aint+$LINUX_SYSCALL%0A%23Save+file+descriptor%0Amovl+%25eax,+ST_INPUT_DESCRIPTOR(%25ebp)%0A%0A%23Even+though+it%E2%80%99s+a+constant,+we+are%0A%23saving+the+output+file+descriptor+in%0A%23a+local+variable+so+that+if+we+later%0A%23decide+that+it+isn%E2%80%99t+always+going+to%0A%23be+STDOUT,+we+can+change+it+easily.%0Amovl+$STDOUT,+ST_OUTPUT_DESCRIPTOR(%25ebp)%0A%0Arecord_read_loop:%0Apushl+ST_INPUT_DESCRIPTOR(%25ebp)%0Apushl+$record_buffer+%23+push+the+address+of+it+%0Acall+read_record%0A%23+garbage+previous+args%0Aaddl+$8,+%25esp%0A%23Returns+the+number+of+bytes+read.%0A%23If+it+isn%E2%80%99t+the+same+number+we%0A%23requested,+then+it%E2%80%99s+either+an%0A%23end-of-file,+or+an+error,+so+we%E2%80%99re%0A%23quitting%0Acmpl+$RECORD_SIZE,+%25eax%0Ajne+finished_reading%0A%23Otherwise,+print+out+the+first+name%0A%23but+first,+we+must+know+it%E2%80%99s+size%0Apushl+$RECORD_FIRSTNAME+%2B+record_buffer%0Acall+count_chars%0Aaddl+$4,+%25esp%0Amovl+%25eax,+%25edx%0Amovl+ST_OUTPUT_DESCRIPTOR(%25ebp),+%25ebx%0Amovl+$SYS_WRITE,+%25eax%0Amovl+$RECORD_FIRSTNAME+%2B+record_buffer,+%25ecx%0Aint+$LINUX_SYSCALL%0Apushl+ST_OUTPUT_DESCRIPTOR(%25ebp)%0Acall+write_newline%0Aaddl+$4,+%25esp%0Ajmp+record_read_loop%0A%0Afinished_reading:%0Amovl+$SYS_EXIT,+%25eax%0Amovl+$0,+%25ebx%0Aint+$LINUX_SYSCALL'),l:'5',n:'0',o:'Assembly+source+%231',t:'0')),k:100,l:'4',m:100,n:'0',o:'',s:0,t:'0')),version:4"></iframe>
 * `pushl $RECORD_FIRSTNAME + record_buffer`: assembler knows that this is refering to push the address of `record_buffer` with offset at `$RECORD_FIRSTNAME`
+
+## Chapter 7: Developing Robust Programs
+
+(klement: this chapter covers very generic SWE principals)
+
+## Chapter 8: Sharing Functions with Code Libraries
+
+### Using a Shared Library
+
+Shared Libraries: allow functions/labels to be shared across different source files.
+
+```asm
+as helloworld-lib.s -o helloworld-lib.o
+ld -dynamic-linker /lib/ld-linux.so.2 \
+   -o hellowrold-lib helloworld-lib.o -lc
+```
+* `-dynamic-linker /lib/ld-linux.so.2`: allow the program to be linked with dynamic program using the dynamic-linker (not the shared library) specified
+    * Loads the external shared libraries
+    * It is a tool that is used by the executable to be able to linked with shared libraries
+* `-lc`: link to the shared `c` library
+    * Links the executable to the `libc.so` shared library (prepends `lib` and appends `.so`)
+    * Format `-lYOUR_SHARED_LIBRARY`
+
+Dynamic vs Statically linked library
+* Static: During link-time the linker will resolve all the undefined names (external reference) in each object files with all other object files.
+    * Resolve by replacing the undefined names with the address (could address of function)
+    * the undefined name will not be in the final executable
+* Dynamic:
+    * During link-time, the undefined name will remain unresolved in the executable.
+    * When the program runs, the dynamic linker will be load the shared library listed in `-lXXX` and resolve all undefined names.
+    * Undefined names will be replaced with the actual address at the end of the start up
+
+### How Shared Library work
+
+Process:
+* All the shared library code does not need to be included in the executable
+* During link-time, the linker will note in the executable on where to find the shared library (ie `libc.so`).
+* When the program starts the dynamic linker will look for the shared library (`libXXX.so`)  in standard places: `/etc/ld.so.conf` and `LD_LIBRARY_PATH`
+* Loads the library into the **program's virtual memory**
+* Replace all the undefined names with the actual addresses.
+
+(note: structs are passed by pointer instead of actual argument (pushing on stack))
+
+## Chapter 9: Intermediate Memory Topics
+
+Terminology:
+* Byte: size of a single storage location
+* Word: size of a register
+* Address: number that refers to a byte (storage location in memory)
+    * asm label directive: symbol will be replace directly with the address of the next instruction (maybe first element of the array)
+    * Doing `movl $label %eax` => `movl $SOMEADDR %eax`, replace `label` with a number and copy into the register.
+* Pointer: word whose value is an address.
+
+### Memory Layout
+
+```txt
+ 0xbfffffff
+ ┌────────────────────────────────┐
+ │           Env Variables        │
+ ├────────────────────────────────┤
+ │          Program Name          │
+ ├────────────────────────────────┤
+ │            CLI Args            │
+ ├────────────────────────────────┤
+ │              Stack             │
+ │                                │
+ │                                │
+ ├────────────────────────────────┤
+ │                                │
+ │                                │
+ │                                │
+ │                                │
+ │           Unmapped Memory      │
+ │                                │
+ │                                │
+ │                                │
+ ├────────────────────────────────┤ <-- Current Break Point after sbrk
+ │                                │
+ │              Heap              │
+ │                                │
+ ├────────────────────────────────┤ <-- Oringal Break Point
+ │                                │
+ │                                │
+ │              BSS               │
+ │                                │
+ ├────────────────────────────────┤
+ │                                │
+ │              DATA              │
+ │                                │
+ │                                │
+ ├────────────────────────────────┤
+ │                                │
+ │             Text               │
+ │                                │
+ │                                │
+ └────────────────────────────────┘
+ 0x08048000
+```
+* Memory layout is linear: from top to bottom
+* Constants: Text (instruction), Data (global constants), BSS (uninitialized constants)
+    * Allocated at the bottom of the memory
+* Stack: grows from top down with only Env variables, cli args (argv/c) and program name at the 
+* Heap: grows like a stack (only increase) from the bottom up
+* Memory between the stack and heap is unmapped → the page is not assign a frame on physical memory/disk
+
+### Getting more memory
+
+sbrk (set break point):
+* Tell linux (kernel) to move the new break point by `N` bytes
+    * linux will return the new break point (last addressable memory)
+    * Could be larger than expected (round up to the nearest page - 4096 byte)
+* Using sbrk will naively act as linear allocator (only increase linearly) but does not support deallocation
+* Require a memory allocator (malloc) to allocate and deallocate memory.
+
+### Simple Memory Manager
+
+<iframe width="800px" height="800" src="https://godbolt.org/e?readOnly=true&hideEditorToolbars=true#z:OYLghAFBqd5QCxAYwPYBMCmBRdBLAF1QCcAaPECAMzwBtMA7AQwFtMQByARg9KtQYEAysib0QXACx8BBAKoBnTAAUAHpwAMvAFYTStJg1BMFSlgCNaAT1JL6yAngGVG6AMKpaAVxYM9rgBk8BkwAOR9zTGIQACYAdi5SAAdUBUInBg9vXz0UtMcBIJDwiyjYhNtMewKGIQImYgIsnz9Eu0wHDLqGgiKwiLL4tvrG5pzhnr6SyOihgEpbVC9iZHYOAGoAUhiAZmU5ACVlAHkhbBB15WJUYGJWdaJ1lkMmYEwnzBYSK3WvBVf3gBadZiWioUQETAKTYaACCW126yRyORhnQ6ywoPBTEhCg%2BX2IPxM62ImAAjl4oZD0DD4dsdrSETtQscACrYIQXVkId5Ja63Vh4v7BYAPHlKElLRwhPEAdzotBBCgA1oz6SjkfxiCD1qtGkxgus0gAvd6oKj474AOnWAHV3kwHF5QVY1YiNb8JQT3gQEIYxTijXhTaR1uYvAR1rLeRH1oQ3TsPSDI773pFgMEGCLQ5EtT6eesUsFIcQE0no%2Bs/Qx0eZHcqbfaQeh0Uwg6b1jQqi3q2WPf7YQA1WEASQCsIAQgFsAB6OShQcjseT7BPBrKqI2oSoUOp3satgEn5g1DKvG0PDrsV4aFwpll%2BkP3aPhlP18v9/Pz9vr8f79/38AT%2BQH/sBgEgeBYGQfeuywgAbgaBiWO8ACya5RPSQjBmaFoHt89Kwk6YiWoS6xghCGTQk%2Bt7qqBtEQXRUH0UxjEsQxbHMWx1HukmPG8UmmwAKzYICgIHJgBDLCE6JFoI6FcYmfGKUpSIyQQeI8qSe4otyvKoMWURRu8pIScQDDrAI1iFnpgh4o8qYgoRtBaciZE4hRJLkpSCjUg8qCrpehDrJgJh4AZWpipgzlIqItDnkYhb8ncLA2sOkZiAoflYrKQq2X5yBVm85nLFFRoEMQXhOqSUaEAgUoRbqoIiglNxJZWTCwU1RAlflhiFYGoJWoyVpKJ0AjrFa6A4kwaryexOwAOIBMc46wgE6xDgcw4TlOQhzZ%2BcK0vS3LXlZxa5fV6aZk15r1bhJEVg07zPMwGZGLSPJMEkAD6l1%2BENYLxRoh27MdeKqedAjvK5NSFiYKYFndPwPVVz2vCKtLIMspKCD9pJMMqID/QIopAwdZOwgmDFCKyBxyG4rKHCuw6hAAYscBzIbCrLDscoS0fJJrYUaSSOu84WIx5GZjR9WClreVqeesAAS2CwgAItgBxfUIw4AFrYKGAAcCYBNiMM3fZ2wxO1CFMEhVsdgYoqGvZMtyfCCsUsratawuo5fccLMs2crKhqTdK7Kb5FjRbBaCx2oW0OiLsFm7cse4rSs%2B9revYAHQch6GkgzRTHFlzsbi89TsKhKyu3l5xGde3OftLlOYdMqDca2QWDADNqFbyrFno%2Bn5zzEKqt7KfxuwKCLqwBpGfp4pEjDrBmsFr1KQ2K6320G%2BsXDIkdCAnSd9l96UA/vEPip/KPq4T4y08evSc%2Bi4vbUr5ga/GZJmDoFDGibuz8X4onpDbOgdt6AdhIOvPAHU3ry0VkIAAmkIL644DgAGki4CXAbPKw3lPgNWHpfGYsDtT2XMHjSe8IwEEJ2AoIhkIWCkKcsgr2ARmZyAABra3QW4VaAQw6qENhoJkzxLzMOIWwmKtA8TBTSAZR4eMaTyxGjDK0kJVAEBLntCCLM5z0x5qEeurEG5UQju%2BLEEJMBfWCPGb88l9hHFOOcdhV48RUC8AwUaZlHiOMcGILCEUSpIh8X4moeIIBzw6HgGg8ibBeKNOJdSwVvq/RBD2eSvFMbEGxgQXGwVlRzBtF3Ze6wGB%2BRFklcSUQ8TAOqeEjyJkzLwW8JgQa8tgBgksCCWKZt7FBKGgQKwSQHSDLsQ4rMBBSAAAFIn%2BNpLYnEwzZmE1vEkP4CBFTbAEpgcwSQX5v3qNWBo6Ilkw28l4KgVBGRfFgnsmIBy56hn2YcpIh15LDgtNQieRoWEkPkd3dhADqq%2BnWBIw0HzzCqFDPGeSf9TI9yhnDdYHS8Doj%2BNAh0zZSSmHWBAfJhSwy0NOoIOYDzUBPPWAAEjQRgrBuCEQHKYKoJkNBqxFUjLKDS%2BY0zkuvNS2ldKNDvJeYc1QjJiz0u4aEPhAihBCICAEGVfjnlso5Sc18WqqmoFlF/eqBhvIYpCeiYlWNGCRhoaU0BDDX67CYPiqECggHcsHoYeGkUp4OsdTsCW0MMggioCWReIrNXBXhbqK1OMaElKZN5EgAqY0FOtWSkpEbWVRtDB9TJmBXqMKTVVeyJL03xvxkqIq6c/Uzx2DQYgprnXoAJQocpp85QKgavfe1takT0nsqsyEHZfH%2BN8uvcSva%2B30m9MRH4VBrhsKKF4Dlu5fV9v7bsBtprHBsDjJGE65UGBZthUkCVrzjm8XpJgVQgV7JXIyIyFISRI1HMZMZYGLFsChDVusQO6wjGhBMbzAxDJqLgesRAqZaz9rWNcScM4FxkRdwfWNE6990SPAFOYHUmjg3mhaciRGKVIz5Q6KecdSh3gJIilVR62TXS5MUgun%2BYYyKnndYAuMFpqlzP3UqCjy7pVMb4uFVsIRDWQ26ZBlxsIDiwmQtgdkBxOTrBQ6OmGlTIawzqWG4E9lBaEaRLHJ6nxvhsfBMqQyUYvXjqHT6mT1iDhKcOKEdaq05DnCM2pjtI6onBuRQwVFTYW2uvMn8nk3n7PogljCyV7KUoRaiNRvEzSRO8QlpAxC9AEW8q7YFqFcYzIfPZZTWazFlAHGOG4DkOtQjzVAw%2BeSA4Gh4FxTlABmzHNMgIQc5AHLgS1STvVeOJmPIUipOCxGRnqB4EbQQacFkfi1NYPU4gVL0slYG6m0lEtSRSzMpEJqN7WDBAAVpWF22y2CAzZWvI6QBAXclegbbo2LTXcjHtgtj7ZryUbAoUQASEDXC8MABAQVHTg6%2Bwd0qPQmryl9AmPNP1vsMAbFDVAJ5kwjdCTdYK%2BVzIhE49xhMgVKmrzMtFxL%2B7NjYBiJscRmwACcTOV54FFIwJYYPKFhKRZ5Sb6JBbE8II0%2BCUCkK5fXnccwPdAxSYTL8/j6BUBQn1ZGLlLZJbBoMMQQqnPQcIElyYU8Jtggrp57O4j6xhxA8DKIJQkvHlQgTB94plavBfIg%2BNXpqB%2Bn2dGeMyZ0NMALNQ8ezhXh1jUy%2Bop5COd9ZG0TfUZAVn7vmyS3OtsDnp27EeP7uE9muuFh2a%2B45py0QXL82Om5dyT2Sredmt9t5HmKmj7H%2BP2AICnoWNm/rd5JV99vpWTwmG45YSnRuzdOxkYY5PE1cKEA%2BV4AJ%2BfAs269Hrsn8fJ13Kls6dWyWDb8IW%2BVgySj1656o08UfHqofQ3R/vA%2BxPyfb9gorHB0GsaEB71zdNXmizKep%2BzqUQR%2BTwNKioruFayol%2BcKGoN%2BUq1Uw89%2B9UT%2Bm%2BW%2BTIUBRKpasakYrg4WF07GR%2BtiX0x4%2Bar0SGik9I/K1mhAUQayYoIO3O%2BOCAz%2BG6M6ZmJE%2B2P28IyALAL6je0aW2089IIQU2yameNGqYEo9GnkREEAeMBO9keBY2zwSQEyMWHBVgoB2gT0NK9iUBJcTI2GOO7YscJ002ze4B3sWsOs%2Bs%2BcwcSmXe8WqgPeHyL2CuGe78C86GzAYu2WIe68fkdkvcN6kYkMjIvB/BdKLcQ4o4%2B8oYWcvssRAQ9hIcThWq2h7wIQuiJBZs3BERfBkaL2l%2BfeU%2BiuBm88KWIIfhuKoYaAfBj0jI2gMC9mX01BA6Y%2B7YwRWRP8WAguWE1OIurBfE9I5g7OQU1SBuRKG8%2BYJ0lglmPewAQRmU0GkIbRyWtI2RRSn%2Bf0t4zaiodKKs6smsHel%2B7KncBYRA9Qiob2t0mhRKzq8EfiKaqkKiNS6K2BaaN28xgBacoB%2Bx2axR2a5x1%2BuwXBaGwWCgPg%2BBBm4%2BaBfq9IpIE2xCFqH2lkxa528JDq9IcWByL2PeL6fw2SqAqY2ohsYYVguIwxOq9acCrswUssRKkgPOa69CL%2BMEyR%2B8s484nJy4jsrwpA1JwhO%2B6IzJ4UsJphSWQpykiJ32AgZSUe24IWTUbhHKwCdKxsWJDCA6fkQhQ%2Bbw3qIWra0pSk9IY2Wxme4J4e8I2gfBAyZEuRqAZBho2%2BOwSxpEmOVmgYF8oRHp0cZkEAx4XpkYFpPxdq5MrR/KFBdaNG0YtO9OjOLOm8q4WA/G/KgpWpNJvogYbAhgsu3qJpIxYJcpZkacMJBYVphZV6ueKxweoKuJV%2BxKeMaUVSmAhqYZp%2BpIoBCY48VmXhDoQovhts9slhoqMRi48R1hX0rcqRjhW2/xzYBxRxGsNhucZxHKM6ehwJHKIsO6qcDJbxVZ1ZOw9kOKSEmesSwQqwR5oJJ5foeidODOQMLOco951mgWR%2BdeByRyl%2Bc8x5BWC6qAbC96Gm3BVk/Bp676k65MTubuBMwpOwsZkUj5iZTOyZzwqZZOyWO495N5dauZQWn8FYfoyZN6fofw1IeF/qoIRprquKc6nGVFcBuwFYohmGmUKoFuya0m6B8BsB9%2BwWqBbJbBuwrgqk5Z7wk09QGZwlOeOwwCHyfeAl%2B6eIhmmZNJrFvR46V5eMEol2vkTFjCfKyW1mX0soXqX0c6hlrpjwrgoYGUhkjIAJhxqsK5pxAhTIzawsH84p%2B5wBja1lU%2B3k5UlU2eAJilghkqsBt5Xl/Z46/yCaWogVTI9kUlrYSJXklF6lCF1ShqIuDweAe6eenFQmyV9I4s4hFh8I2yCguy25CF/wyZbF4KXBxCAVWyJevewm1VnVl2WaDK6CmCOC65zFOwBK4kF05K6RCBy8ZVueFZ/OKJt2qe1kBAoBsqdK8qiqjKKqaq2VU%2BvijJ1SxAzwEBAg%2BA0SOFJ0tVSwScJpspbS9UEmy1RW25oYS%2B%2BU91LFXakQQUNUBk0KFogUVACEbq5kNaMpuwgUQ%2Bv1shiojwcCOubwVCVYX10%2BA564lyJA6OGIj2KFz5TOpGjR%2B1TIKcJ0fILU9wxlVUgUjoEkLoaNSgakk1JS9lHFHp8UxIW2aN14x6%2BNzOhNUK71kleNCZBNRNVUfKgYgUwqt4kRBx4q9VlBuwZGgB4UUQ1w2oaA1YD2QWTR7wGtJA3y1VTpr62qCFBKRAVUjVLV32bVN4JtEFA%2B3V4FkapWXur%2B8M5h9xxIviWWtRQYzxjl/NLOdG5gdUXU8kMx/GTA5ljGx%2BVh0RPJE5y4CR2cM5gcDhrI017Kn5AsE1EpQs9kVVYBtKEVadq5dhmdaR85xtkiW5Qh3RDk9NNxIwYRFoZ5MCEsEAyuauRWyA3gqZ9J/lZSlMzh%2Bqhqyl9kBWHSlITli59Ky5JxthB83No5ZtdROBcFia7UKaz1Bh69jeZ62af5/54kkk9UYeT6ptR9UFG%2BFMcIht0Q/VitQhytOwY0T9wtrSF9po1wX5nyv5nujtped9Y9Fi7436v6/6gGwGfMliH45Mz4mIqxkUzicGhwCGXm6WOkxexAeQRdvmYeoKWGCCaYdYWk6VJZ%2BBEsTdKQngIaYacZIdTOVUyuIQWkwo8UhAPFTWcGcmCmSmmsnIWkuDe%2BK2bAYaq%2BeKoWhKKhmhWknqN2qi59pk8VCM9x9DtAvDViTIzmDMBwbmQ4AQnmRe6oyG1BJ01SP9ajs92efDTIlW1WtWzM80Zj3E1uFoVgSwHkB4Mw39dNzosUPwVYD%2BzUAowFkW6W3kPQElme2Z3qPwgOI871p8K%2BDtPWyI5JxaAIfpbkAgjSoaKiBYgTREMTjQElWk0OGQNosIw8xFu946vdJ07ptYKeWk5JOxjS3KvZn8mWouw5OWWkDlCT9U9mVeMMyouVeIgUyT98%2B6PFVoPu/SKDweAeEyGIwUqDoeoFj2AsyeK1%2BQ%2BGGe1TY0jwLG2enskebe2AyE7MqC2s2A80RcxtqzQy7jTCV5KaxD11fkaQhRARcZ8k7D8ZT5AtIZWlhgPwY2INfi86uzZkNe9yUdBdJTLqcjJz9x5zpI9juwEAx1p1lkvoZ8eIhs01RyPe4YkYaQzxCYFY%2BA6AfNYt4LxetVR94Npd7wHyf5kdkGUVx9FYyT2gFFuN6wkg01c8oBJ%2BNzdzBwDzZw80ErSQrhzhCYBp9UrxVCQRC1REv0WY8U8jh4jIUJ/SLlxxldq9qr8kvTtNAz4u9A/Ve8qdU5GdBcc5zh3ZxZbSYDB0CD9IUDf6LMAGxi3MIGfr/4HACwtAnAAkvAfgHAWgpAqAnAsIpgnwlgPwGUywC89IPApABAmgkbCwBMXAGg4q0bHAkgcbhbSbnAvACgIA4qBbCbRb%2BgnAMQ1bLbtbHAvAzbWgcwCwm8jaGQIAkgQAA"></iframe>
+
+* Global Variable
+    * `heap_begin`: to mark the beginning of the heap (dynamic value - how many instructions,...)
+    * `current_break`: similar to heap but mark the byte after the last addressable byte
+* Constants: 
+    * `.equ HEADER_SIZE, 8`: the header size of the memory block
+    * `.equ HDR_AVAIL_OFFSET, 0`, `.equ HDR_SIZE_OFFSET, 4`: the offset in the header member variables.
+
+`allocate_init`:
+* Purpose: to set the `heap_begin` and `current_break` global varialbe
+* Use the trick of calling `sbrk` with `$0`: return the current break point
+
+`allocate`:
+* `allocate_loop_begin`:
+    1. Check if the current pointer in the heap has reached the end → move the break point if so
+    2. The current pointer will point to a memory block header => check if the block is AVAILABLE
+        * Check if the block is big enough -> is so call `allocate_here`
+    3. Move to the `next_location`:
+        * Add advance the pointer by the size of header and size of memory
+* `allocate_here`:
+    * Mark the memory as unavailable and returns the usable memory (right after header)
+* `move_break`:
+    * At this point we know the memory size needed. 
+    * Calculate the size to sbrk by - size of memory requested + block header
+    * Check if sbrk returns an error
+    * else: mark the newly sbrk-ed memory block as UNAVAILABLE and move `%eax` to the useable memory (right after the header)
+    * Update the program break
+
+`deallocate`: setting the avail member of the header to AVAILABLE
+
+## Chapter 10: Counting Like a Computer
+
+(klement: most content here are very basic computer organization topics)
+
+### Truth, Falsehood, and Binary Numbers
+
+Interesting topics
+* Bitwise AND,OR,NOT,XOR can be done between words in 2 register in a **single** instruction
+    * These operations are very fast
+    * Doing XOR with the register itself is faster than loading $0 into the register
+* Program Status Register: will store the carry if you add 2 register that overflows.
+    * Signify presence of a carry by setting the **carry flag**
+
+### Floating-point numbers
+
+* Represented using *sign*, *exponent* and *mantissa*
+    * *sign*: MSB set if negative number
+    * *exponent*: exponent of the multiplier (next 8 bits)
+        * Exponent with base `2` => `2^n`
+        * Unsigned value buy offset by -127: `2^(exponent - 127)` => represent both positive and negative exponent
+    * *matissa*: repsent the floating point + `1` (always fixed)
+        * ie: `1` (fixed) + `1/2`^1 * (nth bit of mattisa) + `1/2`^2 * (nth -1 bit of mattisa)
+
+### Negative Numbers
+
+* twos complement: get a negative number (x -1)
+    * Perform a NOT operation on the number
+    * add one to the resulting number
+* For positive number: lowest (0) `0000...` and maximum keep adding one bit until (2^(31-1) - 1) `01111..`
+    * `-1` because 0 is "included" in the positive side
+    * Always contain `0` in the MSB
+* For negative number: smallest (-1) `11111...` and keep subtracting one bit until (-2^(31-1)) `1000...`
+    * Always contain `1` in the MSB
+* In absolute terms there is one more negative number than positive number.
+* Sign Extension: to change a 4 bit 2s complement repsentation to 32 bit 2s complement represenation, we cannot simply
+pad the extra MS bits with 0.
+    * Pad the extra MS bits with the MSB value of the smaller representation: `1101` -> `111111111...1101`
+
+## Chapter 11: High-Level Languages
+
+(klement: skipping this chapter as it is very generic)
+
+## Chapter 12: Optimization
+
+Local Optimization (by compiler):
+* Precomputing Calculation: compiler might take all combination of the parameters and precompute the result and place them in a lookup table
+* Cache results of fucntions
+* Locality of Reference: bundle operation on memory that are close together. These operation might share the same page and will not require 2 separate fetching of frame of disk into memory.
+* Register usage: operator on registers instead of memory.
+* Inline Function
+* Optimized Instructions: use more optimized instructions
+* Addressing Modes: fastest mode are *Immediate*, *Register Addressing Mode* > *Direct Addressing Mode* > *Base Pointer* *Indexed Indirect*
+* Data Alignment: Some processor can access data on word-aligned memory faster than non-word aligned
+
+
+
