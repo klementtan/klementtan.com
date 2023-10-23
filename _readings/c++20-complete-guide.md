@@ -2,6 +2,88 @@
 
 ## 6 Ranges
 
+#### 6.1.2 Contraints
+
+Range parameters are template args (no common type) that are constrained by concepts.
+
+`std::range` concept: you must be able to iterate through a elementes with `std::ranges::begin` and `std::ranges::end`
+
+concepts:
+* `range`: iterated from begin to end
+    * base concept for all ranges - all other ranges subsume this
+* `output_range`: range of elements to write values to
+* `input_range`: range to read values from
+* `forward_range`: iterate over the lement multiple times
+* `bidirectional_range`: iterate forward and back
+* `random_acess`:
+* `continguous_range`: contigous memory
+* `sized_range`: constant time `size()`
+
+* directional range (output/input) follows the hierachy of the normal iterators
+
+* `view`: ranges that arecheap to copy or move and assign
+* `viewable_range`: range that can be converted to a view (with `std::ranges::all`)
+* `borrowed_range`: iterators not tied to the lifetime of the range (what this means?)
+* `common_range`: begin and end have the same type
+
+### 6.1.3 Views
+
+**views**: lightweight range that are cheap to create and copy/move
+
+**range adaptors**: createa  view and could perform some operation on the view
+
+Views needs to support:
+* `ranges::begin`, `ranges::end`, `operator++`, `operator*`
+
+**Generating views**: iota
+
+**Lifetime**:
+* Uses reference semantics
+* Ensure the views' referred range lifetime still exists
+
+Writing views:
+* Views use reference semantics so it can modified the underlying range
+
+**Lazy Evaluation**: uses lazy evaluation, processing of the next element only done in `begin()` or `++`
+
+**Caching**: optimisation could happen if we cache the return value of the operation (ie expensive transform)
+* Concurrent iteration could be a problem
+
+### 6.1.4 Sentinels
+
+**Sentinels**: represent the end of range
+* traditionally, the end of a stl container is `.end()` iterator
+    * drawback: this means we traditionally need to have begin and end iterator to have the same type
+    . this might be expensive or not possible. ie cstring will be expensive as it needs to find the null char
+    * not possible when it is an input stream of file content
+        * actually possible but need to create a an end of file iterator
+
+having different end iterator type:
+* don't need to reach the end before process
+* prevent UB of dereferencing `end()`
+
+Defining a sentinel:
+* define a `operator==` that takes the `begin()` operator but don't need to be the same type
+* just need `operator==` as `operator!=` will be automatically generated
+
+### 6.1.5 Defining range
+
+**subrange**: defined by passing the begin and end iterator to `std::ranges::subrange`
+* subrange is actually a view of the provided range
+
+### 6.1.6 Projections
+
+most ranges algorithm takes an additional `Proj` template that will transform the element before executing the algorithm
+
+### 6.2 Borrowed Iterators and Ranges
+
+Passing range as a single argument means there could be lifetime issue when the range is a temporary
+
+`std::ranges::borrowed_iterator_t<Rg>` borrowed iterator: 
+* ensures that the lifetime of the iterator is not dependent on a temporary range (prvalue)
+    * deferencing the `borrowed_iterator` is always valid
+* if the range depends on a temporary, then there will be a compile error if we try to dereference that iterator
+
 
 ## 14 Coroutines
 

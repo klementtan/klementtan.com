@@ -511,6 +511,27 @@ Terminology:
 * NIC attach to the host through a bus (PCIe)
 * host does high level link layer functionality (setting the address)
 
-### 5.2
+### 5.2 Error Detection and Correction technique
+
+#### 5.2.3 Cyclic Redundancy Check (CRC)
+
+* CRC is more robust check than TCP / UDP checkesum as it will be implemented in hardware
+* Algorithm:
+    * CRC bits are chosen by the sender such that it exactly divides the payload using modulo 2 arithematic
+
+### 5.3 Multi Access Protocol
+
+Types of link:
+* Point to point: a link that has singel receiver on each end
+* broadcast: many sends and many receivers
+
+**Broad cast channel problem**:
+* multiple nodes can broadcast frames and the frames will collide => difficult to make sends of any the nodes.
+
+#### 5.3.1 Channel Partitioning Protocols
+
+* Time is divied into **time frame** (different from ethernet frame) and each **time frame** into N **time slot**
+* Each time slot is assigned to a node
+
 
 [TODO: mutlicast](https://netlab.ulusofona.pt/rc/book/4-network/4_08/index.htm)
