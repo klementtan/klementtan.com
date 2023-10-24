@@ -429,6 +429,10 @@ Broadcast IP: 255.255.255.255
 
 * **Default router**: first hop router that all host is attached directly to
 
+* when a IP datagram gets routed, the source/destination IP address does not change
+    * IP is host to host
+* routers use the source and desintation address to route the packet betweens different subnets (LAN)
+
 (skipping routing algorigthms)
 
 #### 4.6 Routing Internet
@@ -532,6 +536,130 @@ Types of link:
 
 * Time is divied into **time frame** (different from ethernet frame) and each **time frame** into N **time slot**
 * Each time slot is assigned to a node
+
+Time division multiplexing: at fixed frequency of interval only a single node can transmit at a time
+
+#### 5.3.2 Random Access Protocols
+
+Overview
+* All transmitting node will transmit at full rate. If there is a collision, the node involved will wait for a random delay.
+* The node with the shortest delay will be able to quickly transmit a frame.
+
+**Slotted ALOHA**
+* All frames have a fixed size of L bits
+* Each slot is L/R seconds (time taken to tramsit a slot)
+    * Nodes only transmit at the beginning of slots
+* At the beginning all nodes are synced to have the same slot
+* If there is a collision all nodes involved will retransmit in the next slot with a probability of p
+
+**ALOHA**
+* similar to slotted ALOHA but instead of waiting for a time slot it will send immediately
+* If there is a collision it will wait for the frame transmission time and retransmit with a probability of p
+
+#### 5.3.4 LAN
+
+* A network of computes connected by L2
+
+### 5.4 Link-Layer Addressing
+
+* Link layer address known as: LAN address, physical address MAC address
+    * each port/adapter has an address
+* MAC address does not change
+* Sending a frame:
+    * an adapter will place the receiving adapter address in the frame
+    * frame is received by all the adapters in the LAN
+    * if the mac address mismatches: drop the frame, otherwise process the frame
+* to broadcast a frame, the mac address will be all 1s (FFF...)
+
+#### 5.4.2 Address Resolution Protocol (ARP)
+
+Problem: allow a sender to receive the MAC address of the receiving adapter with just the receiver's IP address
+* DNS/network gateway are in IP address and not MAC address
+
+Overview:
+* Host has a table of IP address to MAC address (with TTL)
+* Constraints:
+    * Both network adapters needs to be in the same subnet (LAN)
+* Steps:
+    * When a sender wants to send to a receiver with only the receiver IP address
+    * Sender creates an ARP packet
+        * Eth: Mac address=broadcast address
+        * Arp packet:
+            * sending and receiving IP and MAC
+    * Sends the ARP packet to the subnet
+    * one node in the subnet will have an IP adddress that matches the receiving IP address
+    * that one node sends back an ARP response with its mac address
+        * using a normal frame (destiation address != broadcast)
+* ARP table is dynamic (don't need an admin to configure)
+
+**Sending a Datagram to a Node off the subnet**
+1. A sender from subnet A will send to the gateway (router) in subnet A
+    * destination address: gateway in subnet A
+    * Note: uses the gateway router MAC instead of final receiver MAC but IP is still the final receiver
+2. The router in subnet A will see that mac address matches and send the frame to the network layer
+3. Router checks the forwarding table and send the ip datagram to subnet B
+* All mac address is resolved using ARP
+
+### 5.5 Ethernet
+
+**Ethernet Frame**
+* *Data field*:
+    * stores the payload (higher layer data)
+    * size: 46 to 1500
+    * if the data is fragmented a new frame will need to be sent
+    * Data field has a minimum 46 bytes
+        * Total ethernet frame is at least 64 bytes
+* *Destination address*
+    * 6 bytes
+    * mac address of the destination
+* Source address
+    * 6 bytes
+    * mac address of source
+* *Type*:
+    * Stores the network layer protocol (ie IP/ARP)
+    * Allows the host to demultiplex (dispatch) to the correct network layer protocol
+* CRC:
+    * 4 bytes
+* Preamble:
+    * first 7 bytes `10101010` and last byte `10101011`
+    * used to sync the clocks to the senders
+    * using the rate at which it receives `10` it can know the clock of the sender 
+    * the last two `11` tell the receiver that any from that point is important
+    
+
+#### 5.6 Link-layer switching
+
+* Link layer switches are transparent to the host (host do not know that they are sending to a link layer switch)
+* Link layer switch stores a switch table of MAC address of node and the switc hinterface connnecting tho the node
+* **forwarding**:
+    * if the switch know the interface that has the desitation node, the packet will be forward to that node otherwise it will be broadcasted
+* **filtering**:
+    * filters if the destination mac address is back to the same interface
+
+**L2 switch vs L3 router**:
+* L2 switch use the MAC address to forward to the correct destination interface
+* L3 swtich use the IP address to forward to the correct subnet
+
+#### 5.6.5 Virtual LAN (VLAN)
+
+Problem with LAN:
+* Lack of traffic isolation:
+    * everyone in a LAN can receive everyone message (ie ARP/DHCP)
+    * we cannot isolate broadcast to a selected group of nodes
+    * this could be solved with we sub divide the LAN and connect them with a router
+
+VLAN: allow multiple virtual LAN to be defined over a physical LAN (where everyone can reach everyone else on L2)
+
+Port based vlan:
+* The switch's ports are divided into non overlapping group and each group represent a VLAN
+* broadcast message can only be sent to nodes in the same group
+* no change in the ethernet frame - all work is done by the switch
+* sending across vlan: most switch also act as a router that connects both vlan
+
+Cross switch VLAN:
+* **vlan trunk**: switches are connected to each other through a special interfacer that has bidirection data for all VLANS
+* When a switch receives a broadcast frame from a port of a specific VLAN, it will send also send the frame cross the VLAN trunk
+* The receiving switch will know which vlan the frame belongs to and broadcast to the correct nodes that is connected to it.
 
 
 [TODO: mutlicast](https://netlab.ulusofona.pt/rc/book/4-network/4_08/index.htm)
