@@ -57,9 +57,9 @@ search_full_content      : true # true, false (default)
 search_provider          : algolia # lunr (default), algolia
 
 algolia:
-  application_id         : 2GMPK3MWU9 # YOUR_APPLICATION_ID
+  application_id         : OQDXJU3KJ9 # YOUR_APPLICATION_ID
   index_name             : klementtan.com # YOUR_INDEX_NAME
-  search_only_api_key    : c8f007ab5fe36c23ff2ee11ed1a2fdb8 # YOUR_SEARCH_ONLY_API_KEY
+  search_only_api_key    : 3d4868a731ebd8c51319ca1dec2d321c # YOUR_SEARCH_ONLY_API_KEY
   powered_by             : true # true (default), false
 
 # SEO Related
@@ -91,8 +91,8 @@ analytics:
 # Site Author
 author:
   name             : *name # *name is a YAML reference pointing to the &anchor earlier
-  avatar           : "/assets/images/Klement_Photo.jpg"
-  bio              : "Computer Science and Applied Mathematics undergraduate at NUS."
+  avatar           : #"/assets/images/Klement_Photo.jpg"
+  bio              : #"Computer Science and Applied Mathematics undergraduate at NUS."
   location         : "Singapore"
   links:
     - label: "Email"
