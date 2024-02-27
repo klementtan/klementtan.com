@@ -13,7 +13,7 @@ concepts:
     * base concept for all ranges - all other ranges subsume this
 * `output_range`: range of elements to write values to
 * `input_range`: range to read values from
-* `forward_range`: iterate over the lement multiple times
+* `forward_range`: iterate over the element multiple times
 * `bidirectional_range`: iterate forward and back
 * `random_acess`:
 * `continguous_range`: contigous memory
@@ -30,7 +30,7 @@ concepts:
 
 **views**: lightweight range that are cheap to create and copy/move
 
-**range adaptors**: createa  view and could perform some operation on the view
+**range adaptors**: create  view and could perform some operation on the view
 
 Views needs to support:
 * `ranges::begin`, `ranges::end`, `operator++`, `operator*`
@@ -78,11 +78,89 @@ most ranges algorithm takes an additional `Proj` template that will transform th
 ### 6.2 Borrowed Iterators and Ranges
 
 Passing range as a single argument means there could be lifetime issue when the range is a temporary
+* for example if you return an iterator to a temporary passed to a function arg, the returned iterator will point to an already destroyed temporary
+* passing a temporary range to `std::find` -> return an iterator to the temporary range
+* 
 
 `std::ranges::borrowed_iterator_t<Rg>` borrowed iterator: 
 * ensures that the lifetime of the iterator is not dependent on a temporary range (prvalue)
     * deferencing the `borrowed_iterator` is always valid
-* if the range depends on a temporary, then there will be a compile error if we try to dereference that iterator
+* algorithm can return a `borrowed_iterator`: depending on the provided range (temporary or non-temporary) the returned iterator can be de-referenced or not (compile error)
+* algorithm can always return an iterator that is safe to use
+    * if it would dangle then a special return value will be used
+* using borrowed iterator:
+    * if the arg is a temporary (`prvalue`) the return type will be `std::ranges::dangling`
+
+#### 6.2.2 Borrowed Ranges
+
+concept: `std::ranges::borrowed_range`
+
+Borrowed Range:
+* Definition:
+    * when the iterator of the range does not depend on the lifetime of the range
+    * Or when the range is and lvalue
+    * is a concept
+* (klement): what is the actual implementation of the borrowed range concept
+* What this means:
+    * iterators of a range can be used after the range is destroyed
+* borrowed range is usually a subrange/view of another range
+* getting the iterator of the borrowed range outlives the actual borrowed range itself
+    * underlying range/container => borrowed range that is a view of the underlying range/container => borrowed range's iterator that is still valid if the borrowed range is destroyed
+* all lvalues are borrowed range: the iterator on the lvalue ref is still valid eventhough the lvalue ref might be out of scope
+    * what actually is a borrowed range?
+* main idea of a borrow range is if the iterator of the borrow range does not care about the life time of the borrowed range - hence the name borrowed because it is not actually a range
+
+for custom user type, add `std::ranges::enable_borrowed_range`
+
+### 6.3 Views
+
+views: light weight ranges
+
+**range adaptor**:
+* create a view from passing a range in a param
+* functors
+
+**range factory**:
+* creates a view without passing an existing range
+* functors (aka lambda)
+
+standard library provides some general range adaptors or range factories that create these views
+* all in `std::ranges::views` or `std::views` standard library
+
+source views:
+* functors that create a view from an underling resource (ie vector) or generate from nothing
+
+copy and move: all views should provide constant time copy and move
+
+#### 6.3.1 Views on ranges
+
+* Containers and strings are not views because it is expensive to copy and move
+* Converting a range (ie container to a view):
+    * by passing it to `std::ranges::views::all`
+    * by passing `begin`/`end`/`size` to `subrange` or `counted`
+    * by passing it as an argument to one of the range adapters
+        * adapters will implicity convert the container or range to `views`
+        * passing a lvalue container to an adapter will create `ref_view` wrapper -> it is a non-owning
+        * passing a rvalue temporary container to an adapter will create `owning_view` 
+            * ie `std::vector<int>{1,2,3} | std::views::take(5)`
+
+**Views use lazy evaluation**
+
+**Caching Views**:
+* for some views (adapter) we will cache the `begin` iterator to allow a second iterator to be faster
+* example: `filter`, `drop`, `drop-while`, `reverse` will cache the iterator 
+* a consequene is that modifying a range after calling `begin` (ie through iteration) will result in unexpected results
+* it will require a range to be non-const (to cache the range)
+
+**Performance impact of filter**
+* iterating through a range 2 step process
+    1. Calcuating the position/iterator (++/begin)
+    2. Use `*` to deference the iterator
+* Filter impact:
+    * For calculating the iterator to be used, it will need to derefence the passed range
+        * this could be expensive if the previous adapter is transform
+    * a second deference of the previous iterator when we try to iterate through the final range
+
 
 
 ## 14 Coroutines
