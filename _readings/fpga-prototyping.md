@@ -311,6 +311,9 @@ Questions:
 * Look up table (LUT) based logic cells with $$n$$ inputs, is a $$2^n$$-by-$$1$$ memory where it enumerates through the all the permutations of the input and store the output in the table
 * It is able to implement any combinatorial function with `n`-input
 * D-type flip-flop (DFF): output of the LUT can be used directly or stord to the D FF
+    * take a clock as an input
+    * at the rising edge of clock the output will show the input
+    * use as a way to store data
 
 **Marco cell**:
 * special cells that are fabricated at the transitor level with special functionallity
@@ -358,3 +361,9 @@ Questions:
             * last step of implementation
 4. Generate and download the progamming file
     * fpga will be configured based on the programming file
+
+Questions:
+* unsynthesizable code? How does it look like
+* what is time step?
+* RTL vs HDL
+* IOB

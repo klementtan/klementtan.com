@@ -54,13 +54,6 @@ atom_feed:
 
 search                   : true # true, false (default)
 search_full_content      : true # true, false (default)
-search_provider          : algolia # lunr (default), algolia
-
-algolia:
-  application_id         : OQDXJU3KJ9 # YOUR_APPLICATION_ID
-  index_name             : klementtan.com # YOUR_INDEX_NAME
-  search_only_api_key    : 3d4868a731ebd8c51319ca1dec2d321c # YOUR_SEARCH_ONLY_API_KEY
-  powered_by             : true # true (default), false
 
 # SEO Related
 google_site_verification : # Replace this with your ID, or delete
