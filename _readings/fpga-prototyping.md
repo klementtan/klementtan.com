@@ -367,3 +367,114 @@ Questions:
 * what is time step?
 * RTL vs HDL
 * IOB
+
+## Chapter 3: RT-Level Combinational Circuit
+
+**Arithematic Operation**: `+`, `-`, `*`, `/`, `%`, `**`
+* `+` and `-` will be synthesized to addr and substractor blocks
+    * (klement) Is there a predefined block for addr and sub?
+* `*` is more complicted and depends on the synthesis software
+
+**Shift Operator**:
+* `>>`/`<<`: move the bits and adds 0 to either side
+* `>>>>`: the LSB are wrapped to the MSB
+
+**Relational Operator**: `>`/`<`/`>=`/`<=`
+
+**Bitwise Operator**: `&`, `|`, `^`
+
+**Reduction Operator**:
+* bitwise operator on an array
+* only one operand
+* `|a = a[3] | a[2] | a[1] | a[0]`
+
+**Logical Operators**: `&&`, `||`, `!`
+* used for boolean expression and bitwise operators for signal manipulation
+
+**Concatenation and replication operators**:
+* `{ }` can be used to combine small array to a large array
+    ```sv
+wire a1;
+wire [3:0] a4;
+wire [7:0] b8,c8,d8;
+assign a4 = {4{2'b01}} // replicates
+assign b8 = {a4, a4}; // concat
+    ```
+
+**Conditional operator**: `?`
+* `[signal] = [boolean_exp] ? [true_exp] : [false_exp];`
+* based on the boolean expression the signal will be assigned to either of the signal
+
+### Expression bit-length adjustment
+
+Bit length adjustment rule:
+1. Determine the maximum bit length of the operands
+2. extend the bit length of oeprands on the right-hand side to the maximum and evaluate the expression
+3. assign the results t othe left hand side signal - truncate the MSB if the LHS bits < max RHS bits
+
+```sv
+wire [7:0] sum1, sum2
+assign sum1 = (a+ b) >> 1
+```
+* RHS maximum bit is 8 bits => `a + b` will be a 8-bit addition => carry bit truncated => MSB of result always 0
+
+```
+wire [7:0] sum2
+assign sum2 = (0 + a + b) >> 1
+```
+* RHS maximum bit is 32 bits (`0`) => `0 + a + b` is a 32-bit addition => carry is not truncated => MSB might contain the carry bit
+
+### Synthesis of `z` and `x` values
+
+**z**
+* `z` value implies high impedence => output is blocked
+* Used for IO ports 
+
+**x**
+* **x** used to indicate that the we don't care about the signal - used to represent a state we don't care or should not happen
+
+### 3.3 Always block for combinational circuit
+
+Always block:
+* procedural statements - executed in sequence instead of concurrent
+* treated as a black box and might not have a hardware counterparts
+* a poorly written always block cannot be synthesized at all
+
+```sv
+always @([sensitivity_list])
+begin [optional name]
+    [optional local variable declaration];
+    [procedural statement];
+    [procedural statement];
+end
+```
+
+`[sensitivity_list]`
+* a list of signals and events always block responds to  (is sensitive to)
+    * parameters to a function?
+* a timing control construct (what does this mean?)
+
+triggering an always:
+* if any of the signal sensitivity list changes, the always block is activated and exutes the internal procedural statements.
+* no concept of timing other than sensitvity list -> once activate the statements will be executed till the end.
+* always "loops forever"
+
+#### 3.3.2 Procedural assignment
+
+blocking assigment:
+```sv
+[variable_name] = [expression];
+```
+* expression is evaluted and then assigned to the variable
+
+non-blocking assigment:
+```sv
+[variable_name] <= [expression];
+```
+* evaluated expression is only assign at the end of the always block
+
+#### 3.3.3 Variable data types
+
+* expression can only be assigned to an output with one of the variable data types: `reg`, `integer`, `real`, `time`, `realtime`
+* `reg`: is like wire data type but used in procedural output
+* `integer` fixed size (usually 32 bit) signed number in 2's complement format
