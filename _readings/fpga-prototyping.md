@@ -478,3 +478,117 @@ non-blocking assigment:
 * expression can only be assigned to an output with one of the variable data types: `reg`, `integer`, `real`, `time`, `realtime`
 * `reg`: is like wire data type but used in procedural output
 * `integer` fixed size (usually 32 bit) signed number in 2's complement format
+
+### 3.4 IF statement
+
+```sv
+if [boolean_expr_1]
+elseif [boolean_expr_2]
+....
+```
+* can it only be used inside an always block?
+* boolean expression is evaluated before the procdural statements in the branch (implies procedural?)
+* When synthesized the if statements infer "priority routing" networks
+    * (klement) what does this mean?
+
+### 3.5 CASE statment
+
+Like a normal switch statement
+
+```
+case [case_expr]
+    [item]:
+        begin
+            [procedural statement]
+```
+
+**casez and casex**
+* A `?` can be used for for don't case - anything can match
+    * (klement) like pattern matching?
+
+Multiple matches:
+* since `?` is allowed, it is possible to have > 1 item matching the case. In that case, the first match is used
+
+full case:
+* when every possible `case_expr` is covered
+* for uncovered cases, nothing will happen
+* combinational circuit - requires a full case as it requires an output value
+
+parallel case: items are mutuall exclusive
+* parallel case = mutliplexing network
+* non parallel case = priority network
+
+### 3.6 Routing Structure of Conditional Control Constructs
+
+* no "sequential" control in a combinational circuit
+* C's `?` construct is realised by routing network
+
+#### 3.6.1 Priority routing network
+
+* Implemented as a sequence of 2-1 multiplexer (2 input - 1 output)
+    * The select bit tells which input to take
+    ```
+    sel         y
+    0 (false)   i0
+    1 (true)    i1
+    ```
+    * if sel=0 choose i0 else choose i1
+
+```
+if (m ==n)
+    r = a + b + c;
+else if (m > n)
+    r = a - b;
+else
+    r = c + 1;
+```
+* `m==n` is the select bit, if true `a + b + c` is routed to `r` else `a - b` is routed
+* the if condition is usually the selection signal
+* many if else clause will lead to more cascading stages => higher propagation delay
+    * (klement): does the start of the cascading to end need to be in one cycle?
+* `?` is decomposed into a if-else
+* (klement) how do we enforce the first duplicate is chosen
+
+#### 3.6.2 Multiplexing network
+
+* Implemented as a `n-1` multiplexer
+* The desired input => ouput is selected by the selection signal
+* each value of the case is an input of the multiplexer - the items must be mutually exclusive
+
+* (klement) Does the fpga have actual multiplexor or implemented as something else?
+
+### 3.7 Always block coding guidelines
+
+**variable assigned in multiple always blocks**:
+```sv
+reg y;
+reg a, b, clear;
+always @*
+    if (clear) y = 1'b0;
+always @*
+    y = a & b
+```
+* synthetically correct and simulated but cannot be synthesized
+* each always block is a circuit part, having multiple assignment means multiple parts can update the output of each other which is not possible
+* solution: group assignment in a single always block
+    * (klement): what does it mean to have multiple always block? 2 circuit parts running concurrently?
+
+**incomplete sensitivity list**:
+* missing out one input in the sensitivity list
+    * semantically it means if the missed out input change the circuit will not be activated
+        * this is not possible physically -> code will still syntheised but infer the sensitivity list
+* simulation would assume that the one input will not activate the circuit -> discrepency between simulation and synthesis
+    * (klement): interesting example of simulation != synthesis
+
+* use `@*` to include all needed inputs
+
+**incomplete branch and incomplete output assignment**
+
+* combinational circuit should be modeled as pure function with no internal state
+    * verilog standard state that if a variable is not assigned a value in always block, it will use previous assigned value
+        * implemented as a close feedback loop or memory element
+* to prevent unintened memory (ie use previous' memory) **all ouput signals** must be **assigned in all branches**
+* include all the brances of an `if` or `case`
+    * no single `if`
+    * (klement): should have a *full case*?
+    
